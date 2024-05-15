@@ -8,6 +8,8 @@
 #include <cstdlib>
 #include <getopt.h>
 #include <udp_tx.h>
+#include <Kernel/sys/_types/_fd_set.h>
+#include <sys/select.h>
 
 using namespace std;
 
@@ -66,19 +68,65 @@ int main(int argc, char *argv[]) {
     udp_init(&client_socket, encoderNumber);
     uint8_t initiate_connection_cmd[] = "start udp connection";
 
+
+    // transmit until packet is received 
     while(1){
         if (udp_transmit(client_socket, initiate_connection_cmd, sizeof(initiate_connection_cmd))){
             break;
         }  
     }
 
+    // read file descripter:
+    // just a bit array that contains a bit for each fd that sets the bit if data is ready
+    // and clears if data is not ready
+    fd_set readfds;
+
+    struct timeval timeout;
+
+    // timeout valus
+    timeout.tv_sec = 5;
+    timeout.tv_usec = 0;
+
+    // Buffer to read input
+    char buf[256];  
+
+
     while(1){
-        if (udp_receive(client_socket, initiate_connection_cmd, sizeof(initiate_connection_cmd))){
-            break;
-        }  
+
+        while (1) {
+        FD_ZERO(&readfds);
+        FD_SET(STDIN_FILENO, &readfds); // Monitor stdin for input
+        FD_SET(client_socket, &readfds);// Monitor socket for data
+
+        int max_fd = client_socket + 1;
+        int activity = select(max_fd, &readfds, NULL, NULL, &timeout);
+
+        if (activity < 0) {
+            perror("select error");
+        } else if (activity == 0) {
+            printf("select timeout occurred, no data available.\n");
+        } else {
+            if (FD_ISSET(STDIN_FILENO, &readfds)) {
+                fgets(buf, sizeof(buf), stdin); // Read input from stdin
+                if (buf[0] == 'e') {
+                    printf("Exit key pressed, stopping the program.\n");
+                    break;
+                }
+            }
+            if (FD_ISSET(client_socket, &readfds)) {
+                printf("Data available to read on socket1\n");
+                if (udp_receive(client_socket, initiate_connection_cmd, sizeof(initiate_connection_cmd))){
+                    break;
+                }  
+            }
+        }
     }
 
-    ////// NOW WE CAN RECIEVE DATA //////
+
+        
+    }
+
+    udp_close(&client_socket);
 
 
     return 0;
