@@ -8,8 +8,9 @@
 #include <cstdlib>
 #include <getopt.h>
 #include <udp_tx.h>
-#include <Kernel/sys/_types/_fd_set.h>
 #include <sys/select.h>
+#include <chrono>
+#include <ctime>
 
 using namespace std;
 
@@ -76,6 +77,11 @@ int main(int argc, char *argv[]) {
         }  
     }
 
+    cout << "UDP PS Connection Success! " << endl;
+    cout << "Wait for keypress to start..." << endl;
+    getchar();
+    cout << "Data Collecting Started!";
+
     // read file descripter:
     // just a bit array that contains a bit for each fd that sets the bit if data is ready
     // and clears if data is not ready
@@ -86,18 +92,38 @@ int main(int argc, char *argv[]) {
     // timeout valus
     timeout.tv_sec = 5;
     timeout.tv_usec = 0;
-
     // Buffer to read input
     char buf[256];  
+
+    // using chrono library to get relative time 
+    std::chrono::time_point<std::chrono::system_clock> start, end;
+    start = std::chrono::system_clock::now();
+
+    std::chrono::duration<double> elapsed_seconds;
+    double elapsed_time = 0; 
 
 
     while(1){
 
-        while (1) {
+        // TIMED CAPTURE
+        // checks if timed capture based on args passed to ethernet client program
+        if (timedCaptureFlag){
+            end = std::chrono::system_clock::now();
+            elapsed_seconds = end - start;
+            elapsed_time = std::chrono::duration<double>(elapsed_seconds).count();
+
+            if (elapsed_time > dataCollectionDuration){
+                break;
+            }
+        }
+
+        // resetting file descriptor bit array for readfds fd_set var
         FD_ZERO(&readfds);
         FD_SET(STDIN_FILENO, &readfds); // Monitor stdin for input
         FD_SET(client_socket, &readfds);// Monitor socket for data
 
+        // if there is any data available in stdin or in the socket 
+        // specified, then activity returns a nonzero value 
         int max_fd = client_socket + 1;
         int activity = select(max_fd, &readfds, NULL, NULL, &timeout);
 
@@ -106,6 +132,8 @@ int main(int argc, char *argv[]) {
         } else if (activity == 0) {
             printf("select timeout occurred, no data available.\n");
         } else {
+
+            // check if the file descriptor for stdin input has data
             if (FD_ISSET(STDIN_FILENO, &readfds)) {
                 fgets(buf, sizeof(buf), stdin); // Read input from stdin
                 if (buf[0] == 'e') {
@@ -113,6 +141,8 @@ int main(int argc, char *argv[]) {
                     break;
                 }
             }
+
+            // check if the client socket has data
             if (FD_ISSET(client_socket, &readfds)) {
                 printf("Data available to read on socket1\n");
                 if (udp_receive(client_socket, initiate_connection_cmd, sizeof(initiate_connection_cmd))){
@@ -120,15 +150,10 @@ int main(int argc, char *argv[]) {
                 }  
             }
         }
-    }
-
-
         
     }
 
     udp_close(&client_socket);
-
-
     return 0;
 }
 
