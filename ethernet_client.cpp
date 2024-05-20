@@ -7,12 +7,13 @@
 #include <stdio.h>
 #include <cstdlib>
 #include <getopt.h>
-#include <udp_tx.h>
+#include "udp_tx.hpp"
 #include <sys/select.h>
 #include <chrono>
 #include <ctime>
+#include <cstdlib>
 
-using namespace std;
+
 
 #define TX_BYTECOUNT                    1024
 const char *dataCollectionCMD;
@@ -29,6 +30,8 @@ const char *dataCollectionCMD;
     // call getitme function on start 
     // for each packet record relative to start
 
+using namespace std;
+
 int main(int argc, char *argv[]) {
 
     int dataCollectionDuration = 0;
@@ -40,8 +43,8 @@ int main(int argc, char *argv[]) {
     // start "time" "boardID"
     if (argc == 4){
 
-        if (argv[1] != "start"){
-            return false;
+        if (strcmp(argv[1], "start") != 0){
+            return -1;
         }
 
         dataCollectionDuration = atoi(argv[2]);
@@ -51,16 +54,18 @@ int main(int argc, char *argv[]) {
     // start boardID
     } else if (argc == 3) {
 
-        if (argv[1] != "start"){
-            return false;
+        if (strcmp(argv[1], "start") != 0){
+            return -1;
         }
+
+        cout << "the right way" << endl;
 
         encoderNumber = atoi(argv[2]);
 
     // 
     } else {
         // invalid arg count
-        return false; 
+        return -1; 
 
     }
 
@@ -72,9 +77,11 @@ int main(int argc, char *argv[]) {
 
     // transmit until packet is received 
     while(1){
-        if (udp_transmit(client_socket, initiate_connection_cmd, sizeof(initiate_connection_cmd))){
-            break;
-        }  
+        // if (udp_transmit(client_socket, initiate_connection_cmd, sizeof(initiate_connection_cmd))){
+        //     break;
+        // }  
+
+        udp_transmit(client_socket, initiate_connection_cmd, sizeof(initiate_connection_cmd));
     }
 
     cout << "UDP PS Connection Success! " << endl;

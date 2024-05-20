@@ -12,17 +12,19 @@ using namespace std;
 
 
 int main(int argc, char *argv[]) {
-    daemon(0, 0);
+
+    cout << "attempting to connect to port 12345" << endl;
 
     // Create a UDP socket
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd < 0) {
-        cerr << "Failed to create socket" << endl;
-        return 1;
+        cerr << "Failed to create socket [" << sockfd << "]" << endl;
+        return -1;
     }
 
     // Bind the socket to a specific address and port
     struct sockaddr_in serverAddr;
+    memset(&serverAddr, 0, sizeof(serverAddr));
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons(12345); // Replace with your desired port number
     serverAddr.sin_addr.s_addr = INADDR_ANY;
@@ -37,20 +39,21 @@ int main(int argc, char *argv[]) {
     struct sockaddr_in clientAddr;
     socklen_t clientAddrLen = sizeof(clientAddr);
 
+    int count = 0;
+
     while (1) {
         // Receive data from the client
         
         ssize_t numBytes = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *)&clientAddr, &clientAddrLen);
 
         if (numBytes > 0) {
-            
+            cout << "PERIOUD POOSKIE" << endl;
+            break; 
         }
-
-        // Process the received data
-        // ...
-
-        // Print the received data
-        cout << "Received data: " << buffer << endl;
+        if (count % 10000 == 0){
+            cout << count << " loop iterations have passed" << endl;
+        }
+        count++;
     }
 
     close(sockfd);
