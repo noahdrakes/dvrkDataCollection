@@ -11,14 +11,13 @@ using namespace std;
 #define RX_BYTECOUNT    1024
 
 
-int main(int argc, char *argv[]) {
-
+static int initiate_socket_connection(int * sockfd){
     cout << "attempting to connect to port 12345" << endl;
 
     // Create a UDP socket
-    int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sockfd < 0) {
-        cerr << "Failed to create socket [" << sockfd << "]" << endl;
+    *sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (*sockfd < 0) {
+        cerr << "Failed to create socket [" << *sockfd << "]" << endl;
         return -1;
     }
 
@@ -29,33 +28,77 @@ int main(int argc, char *argv[]) {
     serverAddr.sin_port = htons(12345); // Replace with your desired port number
     serverAddr.sin_addr.s_addr = INADDR_ANY;
 
-    if (bind(sockfd, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) < 0) {
+    if (bind(*sockfd, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) < 0) {
         cerr << "Failed to bind socket" << endl;
-        close(sockfd);
-        return 1;
+        close(*sockfd);
+        return -1;
     }
+
+    return 0;
+}
+
+
+
+int main(int argc, char *argv[]) {
+
+    int sockfd;
+
+    int ret_code = initiate_socket_connection(&sockfd);
+
+    if (ret_code!= 0){
+        return -1;
+    }
+
 
     char buffer[RX_BYTECOUNT];
     struct sockaddr_in clientAddr;
     socklen_t clientAddrLen = sizeof(clientAddr);
 
-    int count = 0;
-
     while (1) {
-        // Receive data from the client
-        
         ssize_t numBytes = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *)&clientAddr, &clientAddrLen);
 
         if (numBytes > 0) {
-            cout << "PERIOUD POOSKIE" << endl;
-            break; 
+            cout << "Host Request Received" << endl;
+
+            if (strcmp(buffer, "DVRK INITIATE UDP CONNECTION") == 0){
+                cout << "ZYNQ - START HANDSHAKE" << endl;
+                break;
+            }
         }
-        if (count % 10000 == 0){
-            cout << count << " loop iterations have passed" << endl;
-        }
-        count++;
     }
 
+    char initiateDataCollection[] = "INITIATE DATA COLLECTION";
+    char newBuffer[49];
+
+    while (1) {
+        ssize_t numBytes = sendto(sockfd, initiateDataCollection, sizeof(initiateDataCollection), 0, (struct sockaddr *)&clientAddr, clientAddrLen);
+
+        if (numBytes <= 0) {
+            cout << "socket error" << endl;
+            return -1; 
+        }
+
+    
+        numBytes = recvfrom(sockfd, newBuffer, sizeof(newBuffer), 0, (struct sockaddr *)&clientAddr, &clientAddrLen);
+
+        cout << "after recv" << endl;
+
+
+        if (numBytes > 0){
+
+            cout << "receive" << endl;
+
+            newBuffer[numBytes] = '\0';
+
+            if (strcmp(newBuffer, "DVRK - HANDSHAKE COMPLETE, START DATA COLLECTION") == 0){
+                cout << "ZYNQ - HANDSHAKE COMPLETE, STARTED DATA COLLECTION" << endl;
+                break;
+            }
+        }
+            
+    }
     close(sockfd);
     return 0;
 }
+
+

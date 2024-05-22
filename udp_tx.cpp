@@ -65,19 +65,17 @@ bool udp_receive(int client_socket, void *data, int len)
         uint16_t recieved_bytes = recv(client_socket, data, len, 0);
 
         if (recieved_bytes > 0){
-            return false;
-        } else if (recieved_bytes == 0){
-            return false; // connection closed
+            return true;
         } else {
-            // EAGAIN just means no data is available or some other trivial error 
-            // EWOULDBLOCK just means 
-            if(errno != EAGAIN){
-                return false;
-            }
+            return false;
         }
-
-    return true;
-    
+        //  else {
+        //     // EAGAIN just means no data is available or some other trivial error 
+        //     // EWOULDBLOCK just means 
+        //     if(errno != EAGAIN){
+        //         return false;
+        //     }
+        // }
 }
 
 bool udp_close(int * client_socket){
