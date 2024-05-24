@@ -30,6 +30,16 @@ const char *dataCollectionCMD;
     // call getitme function on start 
     // for each packet record relative to start
 
+enum handshakeSTATE {
+    handshakeReady = 0,
+    handshakeSendReadyStateToPS,
+    handShakeWaitforPS,
+    handShakePsIsReady,
+    handShakeCplt
+};
+
+using namespace std;
+
 static bool isInteger(const char* str) {
     // Check if the string is empty
     if (*str == '\0') {
@@ -40,6 +50,65 @@ static bool isInteger(const char* str) {
     return std::all_of(str, str + strlen(str), ::isdigit);
 }
 
+static bool isExitKeyPressed(){
+    fd_set readfds;
+    FD_ZERO(&readfds);
+    FD_SET(STDIN_FILENO, &readfds); // Monitor stdin for input
+
+    char buf[256];  
+    // check if the file descriptor for stdin input has data
+    if (FD_ISSET(STDIN_FILENO, &readfds)) {
+        fgets(buf, sizeof(buf), stdin); // Read input from stdin
+        if (buf[0] == 'e') {
+            printf("Exit key pressed, stopping the program.\n");
+            return true;
+        }
+    }
+    return false;
+}
+
+// Handshake routine between the host and the processor 
+static bool handshakeRoutineHost(int client_socket, fd_set readfds){
+    int handshake_state = handshakeReady;
+    char sendReadyStateCMD[] = "HOST: READY FOR DATA COLLECTION";
+    char startDataCollectionCMD[] = "HOST: START DATA COLLECTION";
+    char recvBuffer[100];
+    char recvBuffer1[100];
+    while(handshake_state != handShakeCplt){
+        switch(handshake_state){
+            case handshakeReady:{
+                handshake_state = handshakeSendReadyStateToPS;
+                break;
+            }
+            case handshakeSendReadyStateToPS:{
+                udp_transmit(client_socket, sendReadyStateCMD , strlen(sendReadyStateCMD));
+                handshake_state = handShakeWaitforPS;
+                break;
+            }
+            case handShakeWaitforPS:{
+                cout << "handShakeWaitforPS" << endl;
+                bool isDataAvailable = udp_nonblocking_receive(client_socket, recvBuffer1, sizeof(recvBuffer1));
+                cout << "is data available: "<<  isDataAvailable << endl;
+                cout << "DATA DATA: " << recvBuffer << endl;
+                if (isDataAvailable){
+                    if (strcmp(recvBuffer1, "ZYNQ: READY FOR DATA COLLECTION") == 0){
+                        cout << "the zynq is ready boii" << endl;
+                        handshake_state = handShakeCplt;
+                        break;
+                    }
+                }
+                break;
+            }
+        }
+    }
+
+    for (int i = 0; i < 50; i++){
+        udp_transmit(client_socket, startDataCollectionCMD, 28);
+    }
+
+    return true;
+}
+
 using namespace std;
 
 int main(int argc, char *argv[]) {
@@ -47,7 +116,7 @@ int main(int argc, char *argv[]) {
     int dataCollectionDuration = 0;
     bool startFlag = false;
     bool timedCaptureFlag = false;
-    uint8_t encoderNumber; 
+    uint8_t boardID; 
 
 
     // start "time" "boardID"
@@ -64,7 +133,7 @@ int main(int argc, char *argv[]) {
         }
 
         dataCollectionDuration = atoi(argv[1]);
-        encoderNumber = atoi(argv[2]);
+        boardID = atoi(argv[2]);
         timedCaptureFlag = true;
     
     // start boardID
@@ -75,7 +144,7 @@ int main(int argc, char *argv[]) {
             return -1;
         }
 
-        encoderNumber = atoi(argv[1]);
+        boardID = atoi(argv[1]);
     
     } else if (argc == 1) {
 
@@ -91,54 +160,30 @@ int main(int argc, char *argv[]) {
     }
 
     int  client_socket;
+    struct sockaddr_in server_address;
 
-    udp_init(&client_socket, encoderNumber);
-    char initiate_connection_cmd[] = "DVRK INITIATE UDP CONNECTION";
-    char receiveBuffer[25];
+    fd_set readfds;
 
+    udp_init(&client_socket, boardID);
 
-    // transmit until packet is received 
-    while(1){
-        udp_transmit(client_socket, initiate_connection_cmd, sizeof(initiate_connection_cmd));
-
-         cout << "transmit" <<endl;
-        if(udp_receive(client_socket, receiveBuffer, sizeof(receiveBuffer)) == true){
-
-            if (strcmp(receiveBuffer, "INITIATE DATA COLLECTION") == 0){
-                cout << "Initiate Data Collection has been received" << endl;
-                break;
-            }
-        }
+    if(handshakeRoutineHost(client_socket, readfds)){
+        cout << "HOST: HANDSHAKE SUCCESS !" << endl;
     }
 
+    char startDataCollectionCMD[] = "HOST: START DATA COLLECTION";
 
-    cout << "UDP PS Connection Success! " << endl;
-    cout << "Wait for keypress to start..." << endl;
-    getchar();
-    cout << "Data Collecting Started!";
 
-    char startCollectionCmd[] = "DVRK - HANDSHAKE COMPLETE, START DATA COLLECTION";
     
 
-    for (int i = 0 ; i < 5000; i++){
-        udp_transmit(client_socket, startCollectionCmd, sizeof(startCollectionCmd));
-    }
 
-    cout << "WE LIT" << endl;
 
-    // read file descripter:
-    // just a bit array that contains a bit for each fd that sets the bit if data is ready
-    // and clears if data is not ready
-    
-    // fd_set readfds;
+
+
+
+    // getchar();
+
 
     // struct timeval timeout;
-
-    // // timeout valus
-    // timeout.tv_sec = 5;
-    // timeout.tv_usec = 0;
-    // // Buffer to read input
-    // char buf[256];  
 
     // // using chrono library to get relative time 
     // std::chrono::time_point<std::chrono::system_clock> start, end;
@@ -160,42 +205,8 @@ int main(int argc, char *argv[]) {
     //         if (elapsed_time > dataCollectionDuration){
     //             break;
     //         }
-    //     }
-
-    //     // resetting file descriptor bit array for readfds fd_set var
-    //     FD_ZERO(&readfds);
-    //     FD_SET(STDIN_FILENO, &readfds); // Monitor stdin for input
-    //     FD_SET(client_socket, &readfds);// Monitor socket for data
-
-    //     // if there is any data available in stdin or in the socket 
-    //     // specified, then activity returns a nonzero value 
-    //     int max_fd = client_socket + 1;
-    //     int activity = select(max_fd, &readfds, NULL, NULL, &timeout);
-
-    //     if (activity < 0) {
-    //         perror("select error");
-    //     } else if (activity == 0) {
-    //         printf("select timeout occurred, no data available.\n");
-    //     } else {
-
-    //         // check if the file descriptor for stdin input has data
-    //         if (FD_ISSET(STDIN_FILENO, &readfds)) {
-    //             fgets(buf, sizeof(buf), stdin); // Read input from stdin
-    //             if (buf[0] == 'e') {
-    //                 printf("Exit key pressed, stopping the program.\n");
-    //                 break;
-    //             }
-    //         }
-
-    //         // check if the client socket has data
-    //         if (FD_ISSET(client_socket, &readfds)) {
-    //             printf("Data available to read on socket1\n");
-    //             if (udp_receive(client_socket, initiate_connection_cmd, sizeof(initiate_connection_cmd))){
-    //                 break;
-    //             }  
-    //         }
-    //     }
         
+    //     }
     // }
 
     udp_close(&client_socket);

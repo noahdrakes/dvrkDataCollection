@@ -18,4 +18,10 @@ bool udp_close(int * client_socket);
 bool udp_transmit(int client_socket, void *data, int len);
 
 bool udp_receive(int client_socket, void *data, int len);
+
+// this is what ya gotta do fr make a nonblocking receive function
+bool udp_nonblocking_receive(int client_socket, void *data, int len);
+
+// check fd to check if data is available for udp port (and also console input)
+int isDataAvailable(fd_set *readfds, int client_socket);
 #endif

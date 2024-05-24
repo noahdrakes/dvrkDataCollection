@@ -9,8 +9,19 @@
 #include <cstdio>
 #include <cstring>
 #include "udp_tx.hpp" 
+#include <getopt.h>
+#include <sys/select.h>
+#include <cstdlib>
 
 // might need to pass in integer for boardID
+
+using namespace std; 
+
+enum dataBufferState{
+    DATA_IS_AVAILBLE = 1,
+    DATA_IS_NOT_AVAILABLE,
+    SELECT_ERROR
+};
 
 bool udp_init(int * client_socket, uint8_t boardId){
 
@@ -32,13 +43,16 @@ bool udp_init(int * client_socket, uint8_t boardId){
     }
 
     sockaddr_in server_address;
+    memset(&server_address, 0, sizeof(server_address));
     server_address.sin_family = AF_INET;
     server_address.sin_port = htons(12345);
-    server_address.sin_addr.s_addr = inet_addr(ipAddress);
+    inet_pton(AF_INET, ipAddress, &server_address.sin_addr);
 
     ret = connect(*client_socket, (struct sockaddr*)&server_address, sizeof(server_address));
 
     if (ret != 0) {
+        cout << "Failed to connect to server [" << ipAddress << "]" << endl;
+        close(*client_socket);
         return false;
     }
 
@@ -69,14 +83,47 @@ bool udp_receive(int client_socket, void *data, int len)
         } else {
             return false;
         }
-        //  else {
-        //     // EAGAIN just means no data is available or some other trivial error 
-        //     // EWOULDBLOCK just means 
-        //     if(errno != EAGAIN){
-        //         return false;
-        //     }
-        // }
 }
+
+bool udp_nonblocking_receive(int client_socket, void *data, int len){
+
+    fd_set readfds;
+    FD_ZERO(&readfds);
+    FD_SET(client_socket, &readfds); 
+    
+    if(isDataAvailable(&readfds, client_socket) == DATA_IS_AVAILBLE){
+        if (FD_ISSET(client_socket, &readfds)) {
+            printf("Data available to read on socket1\n");
+            if (udp_receive(client_socket, data, len)){
+                return true;
+            }  
+        }
+    }
+    return false;
+}
+
+
+
+// checks if data is available from console in or udp buffer
+int isDataAvailable(fd_set *readfds, int client_socket){
+    struct timeval timeout;
+
+    // timeout valus
+    timeout.tv_sec = 0;
+    timeout.tv_usec = 1000;
+
+    int max_fd = client_socket + 1;
+    int activity = select(max_fd, readfds, NULL, NULL, &timeout);
+
+    if (activity < 0){
+        return SELECT_ERROR;
+    } else if (activity == 0){
+        return DATA_IS_NOT_AVAILABLE;
+    } else {
+        return DATA_IS_AVAILBLE;
+    }
+}
+
 
 bool udp_close(int * client_socket){
     close(*client_socket);
