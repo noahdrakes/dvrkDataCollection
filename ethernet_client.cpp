@@ -72,8 +72,7 @@ static bool handshakeRoutineHost(int client_socket, fd_set readfds){
     int handshake_state = handshakeReady;
     char sendReadyStateCMD[] = "HOST: READY FOR DATA COLLECTION";
     char startDataCollectionCMD[] = "HOST: START DATA COLLECTION";
-    char recvBuffer[100];
-    char recvBuffer1[100];
+    char recvBuffer[100] = {0}; 
     while(handshake_state != handShakeCplt){
         switch(handshake_state){
             case handshakeReady:{
@@ -86,25 +85,21 @@ static bool handshakeRoutineHost(int client_socket, fd_set readfds){
                 break;
             }
             case handShakeWaitforPS:{
-                cout << "handShakeWaitforPS" << endl;
-                bool isDataAvailable = udp_nonblocking_receive(client_socket, recvBuffer1, sizeof(recvBuffer1));
-                cout << "is data available: "<<  isDataAvailable << endl;
-                cout << "DATA DATA: " << recvBuffer << endl;
+                bool isDataAvailable = udp_nonblocking_receive(client_socket, recvBuffer, sizeof(recvBuffer));
                 if (isDataAvailable){
-                    if (strcmp(recvBuffer1, "ZYNQ: READY FOR DATA COLLECTION") == 0){
-                        cout << "the zynq is ready boii" << endl;
+                    if (strcmp(recvBuffer, "ZYNQ: READY FOR DATA COLLECTION") == 0){
+                        cout << "Received Message from Zynq: READY FOR DATA COLLECTION" << endl;
                         handshake_state = handShakeCplt;
                         break;
                     }
                 }
+                handshake_state = handshakeSendReadyStateToPS;
                 break;
             }
         }
     }
 
-    for (int i = 0; i < 50; i++){
-        udp_transmit(client_socket, startDataCollectionCMD, 28);
-    }
+    
 
     return true;
 }
@@ -170,7 +165,14 @@ int main(int argc, char *argv[]) {
         cout << "HOST: HANDSHAKE SUCCESS !" << endl;
     }
 
+    cout << "Press [ENTER] to start data collection ..." ;
+
+    getchar();
+
     char startDataCollectionCMD[] = "HOST: START DATA COLLECTION";
+
+    udp_transmit(client_socket, startDataCollectionCMD, 28);
+
 
 
     

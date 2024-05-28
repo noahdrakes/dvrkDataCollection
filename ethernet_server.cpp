@@ -9,6 +9,7 @@
 using namespace std;
 
 #define RX_BYTECOUNT    1024
+#define ZYNQ_CONSOLE    "[ZYNQ]"
 
 enum handshakeSTATE {
     handshakeReady = 0,
@@ -26,6 +27,13 @@ enum dataBufferState{
 };
 
 
+struct client_udp{
+    int socket;
+    struct sockaddr_in Addr;
+    socklen_t AddrLen;
+};
+
+//
 
 
 // checks if data is available from console in or udp buffer
@@ -48,22 +56,38 @@ static int isDataAvailable(fd_set *readfds, int client_socket){
     }
 }
 
-static bool recvfrom_nonblocking(int client_socket, void * buffer, size_t len, struct sockaddr_in *src_addr, socklen_t *addrlen){
+static bool recvfrom_nonblocking(client_udp *client, void * buffer, size_t len){
 
     fd_set readfds;
     FD_ZERO(&readfds);
-    FD_SET(client_socket, &readfds);
+    FD_SET(client->socket, &readfds);
 
-    if(isDataAvailable(&readfds, client_socket) == DATA_IS_AVAILBLE){
-        cout << "data is available" << endl;
-        if (FD_ISSET(client_socket, &readfds)) {
-            printf("Data available to read on socket1\n");
-            if (recvfrom(client_socket, buffer, len, 0, (struct sockaddr *)src_addr, addrlen)){
+    if(isDataAvailable(&readfds, client->socket) == DATA_IS_AVAILBLE){
+        // cout << "data is available" << endl;
+        if (FD_ISSET(client->socket, &readfds)) {
+            // printf("Data available to read on socket1\n");
+            if (recvfrom(client->socket, buffer, len, 0, (struct sockaddr *)&client->Addr, &client->AddrLen)){
                 return true;
             }  
         }
     }
     return false;
+}
+
+static bool wait_for_start(client_udp *client){
+    char recvBuffer[100] = {0};
+    while(1){
+        bool is_data_available = recvfrom_nonblocking(client, recvBuffer, 100);
+        if (is_data_available){
+            if(strcmp(recvBuffer, "HOST: START DATA COLLECTION") == 0){
+                    cout << "Received Message from Host: START DATA COLLECTION" << endl;
+                break;
+            } else {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 static int initiate_socket_connection(int * client_socket){
@@ -92,26 +116,23 @@ static int initiate_socket_connection(int * client_socket){
     return 0;
 }
 
-static bool handshakeRoutineHostPS(int client_socket) {
+static bool handshakeRoutineHostPS(client_udp *client) {
     int handshake_state = handshakeReady;
-    char recvBuffer[100];
-    struct sockaddr_in clientAddr;
-    socklen_t clientAddrLen = sizeof(clientAddr);
+    char recvBuffer[100] = {0};
+    
     char initiateDataCollection[] = "ZYNQ: READY FOR DATA COLLECTION";
 
     while(handshake_state != handShakeCplt){
         switch(handshake_state){
             case handshakeReady:{
                 handshake_state = handShakeWaitforHost;
-                cout << "handshake_state: " << handshake_state << endl;
                 break;
             }
             case handShakeWaitforHost:{
-                bool is_data_available = recvfrom_nonblocking(client_socket, recvBuffer, 100, &clientAddr, &clientAddrLen);
-                cout << "data available: %d " << is_data_available << endl;
+                bool is_data_available = recvfrom_nonblocking(client, recvBuffer, 100);
                 if (is_data_available){
-                    cout << "data that is available: " << recvBuffer << endl; 
                     if(strcmp(recvBuffer, "HOST: READY FOR DATA COLLECTION") == 0){
+                        cout << "Received Message from Host: READY FOR DATA COLLECTION" << endl;
                         handshake_state = handshakeSendReadyStateToHost;
                         break;
                     } 
@@ -119,55 +140,49 @@ static bool handshakeRoutineHostPS(int client_socket) {
                 break;
             }
             case handshakeSendReadyStateToHost:{
-                if(sendto(client_socket, initiateDataCollection, strlen(initiateDataCollection), 0, (struct sockaddr *)&clientAddr, clientAddrLen) < 0 ){
+                if(sendto(client->socket, initiateDataCollection, strlen(initiateDataCollection), 0, (struct sockaddr *)&client->Addr, client->AddrLen) < 0 ){
                     perror("sendto failed");
                 }
-                handshake_state = handShakeIsHostReady;
-                cout << "handshakeSendReadyStateToHost" << endl;
-                break;
-            }
-            case handShakeIsHostReady:{
-                cout << "handShakeIsHostReady" << endl;
-                bool is_data_available = recvfrom_nonblocking(client_socket, recvBuffer, 100, &clientAddr, &clientAddrLen);
-                if (is_data_available){
-                    cout << "BIG DATA AVAILABLE" << endl;
-                    cout << "data that is available: " << recvBuffer << endl; 
-                    if(strcmp(recvBuffer, "HOST: START DATA COLLECTION") == 0){
-                        handshake_state = handShakeCplt;
-                        break;
-                    } 
-                }
-                handshake_state = handshakeSendReadyStateToHost;
+                handshake_state = handShakeCplt;
                 break;
             }
         } 
     }
-
     return true;
 }
 
 
 
-
-
 int main(int argc, char *argv[]) {
 
-    int client_socket;
+    client_udp *client;
+    client->AddrLen = sizeof(client->Addr);
 
-    int ret_code = initiate_socket_connection(&client_socket);
+    int ret_code = initiate_socket_connection(&client->socket);
 
     if (ret_code!= 0){
         return -1;
     }
 
-    cout << "before handshake routine" << endl;
+    cout << "Start Handshake Routine..." << endl;
 
-    if(handshakeRoutineHostPS(client_socket)){
+    if(handshakeRoutineHostPS(client)){
         cout << "ZYNQ: HANDSHAKE SUCCESS" << endl;
     }
 
+    cout << "Wait for User to start data collection ... " << endl;
 
-    close(client_socket);
+    bool retValue = wait_for_start(client);
+
+    if (!retValue){
+        cout << "ZYNQ recieved invalid cmd from host" << endl;
+        close(client->socket);
+        return -1;
+    }
+
+    cout << "STARTING DATA COLLECTION!" << endl;
+
+    close(client->socket);
     return 0;
 }
 

@@ -93,7 +93,7 @@ bool udp_nonblocking_receive(int client_socket, void *data, int len){
     
     if(isDataAvailable(&readfds, client_socket) == DATA_IS_AVAILBLE){
         if (FD_ISSET(client_socket, &readfds)) {
-            printf("Data available to read on socket1\n");
+            // printf("Data available to read on socket1\n");
             if (udp_receive(client_socket, data, len)){
                 return true;
             }  
