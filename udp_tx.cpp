@@ -17,11 +17,7 @@
 
 using namespace std; 
 
-enum dataBufferState{
-    DATA_IS_AVAILBLE = 1,
-    DATA_IS_NOT_AVAILABLE,
-    SELECT_ERROR
-};
+
 
 bool udp_init(int * client_socket, uint8_t boardId){
 
@@ -66,7 +62,7 @@ bool udp_transmit(int client_socket, void * data, int size){
         return false;
     }
 
-    if (send(client_socket, data, size, 0) > 0){
+    if (send(client_socket, data, size, 0) >= 0){
         return true;
     } else {
         return false;
@@ -85,21 +81,28 @@ bool udp_receive(int client_socket, void *data, int len)
         }
 }
 
-bool udp_nonblocking_receive(int client_socket, void *data, int len){
+int udp_nonblocking_receive(int client_socket, void *data, int len){
 
     fd_set readfds;
     FD_ZERO(&readfds);
-    FD_SET(client_socket, &readfds); 
-    
-    if(isDataAvailable(&readfds, client_socket) == DATA_IS_AVAILBLE){
+    FD_SET(client_socket, &readfds);
+
+    int ret_code = isDataAvailable(&readfds, client_socket) ;
+
+    if(ret_code == UDP_DATA_IS_AVAILBLE ){
         if (FD_ISSET(client_socket, &readfds)) {
-            // printf("Data available to read on socket1\n");
-            if (udp_receive(client_socket, data, len)){
-                return true;
-            }  
+            ret_code = recv(client_socket, data, len, 0);
+            if (ret_code == 0){
+                return UDP_CONNECTION_CLOSED_ERROR;
+            } else if (ret_code < 0){
+                return UDP_SOCKET_ERROR;
+            } else {
+                return UDP_DATA_IS_AVAILBLE;
+            }
         }
     }
-    return false;
+
+    return ret_code;
 }
 
 
@@ -116,11 +119,11 @@ int isDataAvailable(fd_set *readfds, int client_socket){
     int activity = select(max_fd, readfds, NULL, NULL, &timeout);
 
     if (activity < 0){
-        return SELECT_ERROR;
+        return UDP_SELECT_ERROR;
     } else if (activity == 0){
-        return DATA_IS_NOT_AVAILABLE;
+        return UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT;
     } else {
-        return DATA_IS_AVAILBLE;
+        return UDP_DATA_IS_AVAILBLE;
     }
 }
 

@@ -18,6 +18,8 @@
 #define TX_BYTECOUNT                    1024
 const char *dataCollectionCMD;
 
+
+
 // NOTE:
 // HOST_IP_ADDRESS = "169.254.255.252"
 // PS IP ADDRESS    (ETH1) = "169.254.10.0"  
@@ -30,15 +32,18 @@ const char *dataCollectionCMD;
     // call getitme function on start 
     // for each packet record relative to start
 
-enum handshakeSTATE {
-    handshakeReady = 0,
-    handshakeSendReadyStateToPS,
-    handShakeWaitforPS,
-    handShakePsIsReady,
-    handShakeCplt
+enum DataCollectionStateMachine {
+    SM_READY = 0,
+    SM_SEND_READY_STATE_TO_PS,
+    SM_WAIT_FOR_PS_HANDSHAKE,
+    SM_SEND_START_DATA_COLLECTIION_CMD_TO_PS,
+    SM_EXIT
 };
 
 using namespace std;
+
+
+
 
 static bool isInteger(const char* str) {
     // Check if the string is empty
@@ -67,41 +72,50 @@ static bool isExitKeyPressed(){
     return false;
 }
 
-// Handshake routine between the host and the processor 
-static bool handshakeRoutineHost(int client_socket, fd_set readfds){
-    int handshake_state = handshakeReady;
+// TODO: figure out valid return code for state machine success and failure
+static int DataCollectionStateMachine(int client_socket, fd_set readfds){
+    int handshake_state = SM_SEND_READY_STATE_TO_PS;
     char sendReadyStateCMD[] = "HOST: READY FOR DATA COLLECTION";
     char startDataCollectionCMD[] = "HOST: START DATA COLLECTION";
     char recvBuffer[100] = {0}; 
-    while(handshake_state != handShakeCplt){
+    while(handshake_state != SM_EXIT){
         switch(handshake_state){
-            case handshakeReady:{
-                handshake_state = handshakeSendReadyStateToPS;
-                break;
-            }
-            case handshakeSendReadyStateToPS:{
+            case SM_SEND_READY_STATE_TO_PS:{
                 udp_transmit(client_socket, sendReadyStateCMD , strlen(sendReadyStateCMD));
-                handshake_state = handShakeWaitforPS;
+                handshake_state = SM_WAIT_FOR_PS_HANDSHAKE;
                 break;
             }
-            case handShakeWaitforPS:{
-                bool isDataAvailable = udp_nonblocking_receive(client_socket, recvBuffer, sizeof(recvBuffer));
-                if (isDataAvailable){
+            case SM_WAIT_FOR_PS_HANDSHAKE:{
+                int ret_code = udp_nonblocking_receive(client_socket, recvBuffer, sizeof(recvBuffer));
+                if (ret_code == UDP_DATA_IS_AVAILBLE){
                     if (strcmp(recvBuffer, "ZYNQ: READY FOR DATA COLLECTION") == 0){
                         cout << "Received Message from Zynq: READY FOR DATA COLLECTION" << endl;
-                        handshake_state = handShakeCplt;
+                        handshake_state = SM_SEND_START_DATA_COLLECTIION_CMD_TO_PS;
+                        break;
+                    } else {
+                        handshake_state = SM_SEND_READY_STATE_TO_PS;
                         break;
                     }
+                } else if (ret_code == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT){
+                    handshake_state = SM_SEND_READY_STATE_TO_PS;
+                    break;
+                } else {
+                    cout << "[UDP_ERROR] - return code: " << ret_code << endl;;
+                    close(client_socket);
+                    return ret_code;
                 }
-                handshake_state = handshakeSendReadyStateToPS;
+            }
+            case SM_SEND_START_DATA_COLLECTIION_CMD_TO_PS:{
+                cout << "Press [ENTER] to start data collection ..." << endl;
+                getchar();
+                udp_transmit(client_socket, startDataCollectionCMD, 28);
+                handshake_state = SM_EXIT;
                 break;
             }
         }
     }
 
-    
-
-    return true;
+    return 1;
 }
 
 using namespace std;
@@ -146,6 +160,7 @@ int main(int argc, char *argv[]) {
         cout << "Ethernet Client Program:" << endl;
         cout << "./ethernet_client <captureTime> <boardID>" << endl;
         cout << "where <captureTime> is an optional arg!" << endl;
+        cout << "[NOTE] Make sure to start the server before you start the client" << endl;;
         return 0;
 
     // 
@@ -161,25 +176,7 @@ int main(int argc, char *argv[]) {
 
     udp_init(&client_socket, boardID);
 
-    if(handshakeRoutineHost(client_socket, readfds)){
-        cout << "HOST: HANDSHAKE SUCCESS !" << endl;
-    }
-
-    cout << "Press [ENTER] to start data collection ..." ;
-
-    getchar();
-
-    char startDataCollectionCMD[] = "HOST: START DATA COLLECTION";
-
-    udp_transmit(client_socket, startDataCollectionCMD, 28);
-
-
-
-    
-
-
-
-
+    DataCollectionStateMachine(client_socket, readfds);
 
 
     // getchar();

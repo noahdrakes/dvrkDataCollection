@@ -8,6 +8,19 @@
 // correct this to value in EthUdpPort.cpp in unsigned int EthUdpPort::GetMaxReadDataSize(void) method
 #define UDP_MAX_QUADLET_PER_PACKET 1500/32 
 
+enum UDP_RETURN_CODES{
+    UDP_DATA_IS_AVAILBLE = 0,
+    UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT,
+    UDP_SELECT_ERROR,
+    UDP_CONNECTION_CLOSED_ERROR,
+    UDP_SOCKET_ERROR
+};
+
+
+
+
+
+
 // upd init function
 bool udp_init(int * client_socket, uint8_t encoder_number);
 
@@ -20,7 +33,7 @@ bool udp_transmit(int client_socket, void *data, int len);
 bool udp_receive(int client_socket, void *data, int len);
 
 // this is what ya gotta do fr make a nonblocking receive function
-bool udp_nonblocking_receive(int client_socket, void *data, int len);
+int udp_nonblocking_receive(int client_socket, void *data, int len);
 
 // check fd to check if data is available for udp port (and also console input)
 int isDataAvailable(fd_set *readfds, int client_socket);
