@@ -5,20 +5,37 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <cstdlib>
-#include "BasePort.h"
-#include "PortFactory.h"
 #include <iostream>
 #include <sstream>
 #include <fstream>
 #include "AmpIO.h"
 #include <vector>
 #include <string>
+#include <chrono>
+#include <ctime>
+
+#include "BasePort.h"
+#include "PortFactory.h"
+#include "EthBasePort.h"
 
 
 using namespace std;
 
 #define RX_BYTECOUNT    1024
 #define ZYNQ_CONSOLE    "[ZYNQ]"
+
+// MAX_PACKET_SIZE is calculated from GetMaxWriteDataSize in EthUdpPort.cpp
+#define MAX_PACKET_SIZE     1446
+
+uint32_t buffer1[MAX_PACKET_SIZE];
+uint32_t buffer2[MAX_PACKET_SIZE];
+
+// #define QLA_NUM_MOTORS      4
+// #define QLA_NUM_ENCODERS    4
+// #define DQLA_NUM_MOTORS     8
+// #define QLA_NUM_ENCODERS    8
+// #define DRAC_NUM_MOTORS     10
+// #define DRAC_NUM_ENCODERS   7
 
 enum DataCollectionStateMachine {
     SM_READY = 0,
@@ -43,6 +60,7 @@ struct client_udp{
     struct sockaddr_in Addr;
     socklen_t AddrLen;
 };
+
 
 
 // checks if data is available from console in or udp buffer
@@ -90,24 +108,6 @@ static int udp_recvfrom_nonblocking(client_udp *client, void *buffer, size_t len
     return ret_code;
 }
 
-// static bool wait_for_start(client_udp *client){
-//     cout << "Wait for User to start data collection ... " << endl;
-
-//     char recvBuffer[100] = {0};
-//     while(1){
-//         bool ret_code = udp_recvfrom_nonblocking(client, recvBuffer, 100);
-//         if (ret_code){
-//             if(strcmp(recvBuffer, "HOST: START DATA COLLECTION") == 0){
-//                     cout << "Received Message from Host: START DATA COLLECTION" << endl;
-//                 break;
-//             } else {
-//                 close(client->socket);
-//                 return false;
-//             }
-//         }
-//     }
-//     return true;
-// }
 
 static int initiate_socket_connection(int *client_socket){
     cout << "attempting to connect to port 12345" << endl;
@@ -135,6 +135,95 @@ static int initiate_socket_connection(int *client_socket){
     return 0;
 }
 
+// calculate the size of a sample in bytes
+static uint16_t calculate_sizeof_sample(uint8_t num_encoders, uint8_t num_motors){
+
+    // Timestamp (32 bit)                                                       [4 byte]
+    // EncoderNum and MotorNum (32 bit -> each are 16 bit)                      [4 byte]
+    // Encoder Position (32 * num of encoders)                                  [4 byte * num of encoders]
+    // Encoder Velocity Predicted (64 * num of encoders -> truncated to 32bits) [4 bytes * num of encoders]
+    // Motur Current and Motor Status (32 * num of Motors -> each are 16 bits)  [4 byte * num of motors]
+
+    return (2 + (1 * num_encoders) + (1 * num_encoders) + (1 * num_motors)) * 4;
+
+}
+
+static uint16_t calculate_samples_per_packet(uint8_t num_encoders, uint8_t num_motors){
+
+    
+
+    return (MAX_PACKET_SIZE/ calculate_sizeof_sample(num_encoders, num_motors) );
+}
+
+static float calculate_duration_as_float(chrono::high_resolution_clock::time_point start, chrono::high_resolution_clock::time_point end ){
+    std::chrono::duration<float> duration = end - start;
+    return duration.count();
+}
+
+static bool load_data_buffer(BasePort *Port, AmpIO *Board, uint32_t *data_buffer, int len){
+
+    if(data_buffer == NULL){
+        cout << "databuffer pointer is null" << endl;
+        return false;
+    }
+
+    if (len == 0){
+        cout << "len of databuffer == 0" << endl;
+        return false;
+    }
+
+    Port->ReadAllBoards();
+
+    if (!Board->ValidRead()){
+        cout << "invalid read" << endl;
+        return false;
+    }
+
+    // start time
+    chrono::time_point<std::chrono::high_resolution_clock> start, end;
+    start = std::chrono::high_resolution_clock::now();
+
+    uint8_t num_encoders = Board->GetNumEncoders();
+    uint8_t num_motors = Board->GetNumMotors();
+    
+
+    uint16_t samples_per_packet = calculate_samples_per_packet(num_encoders, num_motors);
+
+    uint16_t count = 0;
+
+    // CAPTURE DATA 
+
+    for (int i = 0; i < samples_per_packet; i++){
+
+        // DATA 1: timestamp
+        end = std::chrono::high_resolution_clock::now();
+        float time_elapsed = calculate_duration_as_float(start,end);
+        data_buffer[count++] = static_cast<uint32_t> (time_elapsed);
+
+        // DATA 2: num of encoders and num of motors
+        data_buffer[count++] = (uint32_t)(num_encoders << 16) | (num_motors);
+
+        // DATA 3: encoder position (for num_encoders)
+        for (int i = 0; i < num_encoders; i++){
+            data_buffer[count++] = static_cast<uint32_t>(Board->GetEncoderPosition(i));
+
+            float encoder_velocity_float= static_cast<float>(Board->GetEncoderVelocityPredicted(i));
+            data_buffer[count++] = *reinterpret_cast<uint32_t *>(&encoder_velocity_float);
+        }
+
+        // DATA 4: motor current and motor status (for num_motors)
+        for (int i = 0; i < num_motors; i++){
+            uint32_t motor_curr = Board->GetMotorCurrent(i); 
+            uint32_t motor_status = static_cast<uint32_t> (Board->GetMotorStatus(i));
+            data_buffer[count++] = (uint32_t)(((motor_status & 0x0000FFFF) << 16) | (motor_curr & 0x0000FFFF));
+        }
+    }
+    return true;
+}
+
+
+
+
 // TODO: Data collection should be in State Machine in here
 static int dataCollectionStateMachine(client_udp *client) {
     cout << "Start Handshake Routine..." << endl;
@@ -143,6 +232,12 @@ static int dataCollectionStateMachine(client_udp *client) {
     char recvBuffer[100] = {0};
     
     char initiateDataCollection[] = "ZYNQ: READY FOR DATA COLLECTION";
+
+    chrono::time_point<std::chrono::system_clock> start, end;
+    start = chrono::system_clock::now();
+
+    std::chrono::duration<double> elapsed_seconds;
+    double elapsed_time = 0; 
 
     while(handshake_state != SM_EXIT){
 
@@ -193,6 +288,9 @@ static int dataCollectionStateMachine(client_udp *client) {
             } 
         }
     }
+    end = std::chrono::system_clock::now();
+    elapsed_seconds = end - start;
+    elapsed_time = std::chrono::duration<double>(elapsed_seconds).count();
     return true;
 }
 
@@ -205,10 +303,11 @@ int main(int argc, char *argv[]) {
     // Initializing BasePort stuff
     // stringstream debugStream;
 
-    std::stringstream debugStream(std::stringstream::out|std::stringstream::in);
+    BasePort::ProtocolType protocol = BasePort::PROTOCOL_SEQ_RW;
+
 
     string portDescription = BasePort::DefaultPort();
-    BasePort *Port = PortFactory(portDescription.c_str(), debugStream);
+    BasePort *Port = PortFactory(portDescription.c_str());
 
     cout << "Board ID " << Port->GetBoardId(0) << endl;
 
@@ -217,35 +316,50 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
-
     if (Port->GetNumOfNodes() == 0) {
         std::cerr << "Failed to find any boards" << std::endl;
         return -1;
     }
 
-    std::vector<AmpIO*> BoardList;
-    BoardList.push_back(new AmpIO(Port->GetBoardId(Port->GetBoardId(0))));
+    AmpIO *Board = new AmpIO(Port->GetBoardId(0));
 
-    cout << "Board List size: " << BoardList.size() ;
+    Port->AddBoard(Board);
+    
+    cout << "GET NUM OF ENCODERS: " << Board->GetNumEncoders() << endl;
+    cout << "GET NUM OF Motors: " << Board->GetNumMotors() << endl;
+    cout << "GET BOARD ID: " << (unsigned int) Board->GetBoardId() << endl;
+    cout << "timestamp: " << Board->GetTimestamp() << endl;
+    
+    cout << "hardwareVer: " << Board->GetHardwareVersionString() << endl;
+    cout << "EncoderPos: " << Board->GetEncoderPosition(0) << endl;
+    cout << "MotorCurr: " << Board->GetMotorCurrent(0) << endl;
 
-    // create client object and set the addLen to the sizeof of the sockaddr_in struct
-    client_udp client;
-    client.AddrLen = sizeof(client.Addr);
 
-    // initiate socket connection to port 12345
-    int ret_code = initiate_socket_connection(&client.socket);
+    // uint32_t data_buffer[80] = {0};
+    // uint32_t len = 19;
+    // float timestamp = 123;
+    // load_data_buffer(Port, Board, data_buffer, len);
 
-    if (ret_code!= 0){
-        return -1;
-    }
+    
 
-    // start handshake routine between host and client 
+    // // create client object and set the addLen to the sizeof of the sockaddr_in struct
+    // client_udp client;
+    // client.AddrLen = sizeof(client.Addr);
 
-    dataCollectionStateMachine(&client);
+    // // initiate socket connection to port 12345
+    // int ret_code = initiate_socket_connection(&client.socket);
 
-    cout << "STARTING DATA COLLECTION!" << endl;
+    // if (ret_code!= 0){
+    //     return -1;
+    // }
 
-    close(client.socket);
+    // // start handshake routine between host and client 
+
+    // dataCollectionStateMachine(&client);
+
+    // cout << "STARTING DATA COLLECTION!" << endl;
+
+    // close(client.socket);
     return 0;
 }
 
