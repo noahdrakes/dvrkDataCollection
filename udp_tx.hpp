@@ -6,7 +6,8 @@
 #define MTU_DEFAULT 1500
 
 // correct this to value in EthUdpPort.cpp in unsigned int EthUdpPort::GetMaxReadDataSize(void) method
-#define UDP_MAX_QUADLET_PER_PACKET 1500/32 
+#define UDP_REAL_MTU                1446
+#define UDP_MAX_QUADLET_PER_PACKET  UDP_REAL_MTU/4
 
 enum UDP_RETURN_CODES{
     UDP_DATA_IS_AVAILBLE = 0,

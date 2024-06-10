@@ -58,7 +58,7 @@ bool udp_init(int * client_socket, uint8_t boardId){
 bool udp_transmit(int client_socket, void * data, int size){
     
     // change UDP_MAX_QUADLET to 
-    if (size > UDP_MAX_QUADLET_PER_PACKET){
+    if (size > UDP_REAL_MTU){
         return false;
     }
 

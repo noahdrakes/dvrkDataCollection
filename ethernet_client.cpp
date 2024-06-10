@@ -123,18 +123,29 @@ static int DataCollectionStateMachine(int client_socket, fd_set readfds){
             case SM_START_DATA_COLLECTION:{
                 start_time = std::chrono::high_resolution_clock::now();
                 float time_elapsed = 0; 
+                int count = 0;
 
-                uint32_t data_buffer[1446] = {0};
+                uint32_t data_buffer[1400] = {0};
                 char endDataCollectionCmd[] = "CLIENT: STOP_DATA_COLLECTION";
+                uint32_t temp = 0;
 
                 while(time_elapsed < 3){
 
-                    ret_code = udp_nonblocking_receive(client_socket, data_buffer, 1446);
-                    
-                    for (int i = 0; i < 1446/4; i++){
-                        printf("data_buffer[%d]: 0x%X\n", i, data_buffer[i]);
-                    }
+                    ret_code = udp_nonblocking_receive(client_socket, data_buffer, 1400);
 
+                    if (ret_code == UDP_DATA_IS_AVAILBLE){
+                        
+                        // might need to use timestamp to verify that this is truly new data
+                        // index 0 is always the time stamp
+                        // so im confirming that the timestamp from this packet and the previous 
+                        // packet are not the same
+                        if (temp != data_buffer[0]){
+                            cout << "count: " << count++ << endl;
+                        }
+                        
+                    }
+                    
+                    temp = data_buffer[0];
                     end_time = std::chrono::high_resolution_clock::now();
                     time_elapsed = calculate_duration_as_float(start_time, end_time);
                 }
