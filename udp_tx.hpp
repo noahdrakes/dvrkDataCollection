@@ -17,10 +17,6 @@ enum UDP_RETURN_CODES{
 };
 
 
-
-
-
-
 // upd init function
 bool udp_init(int * client_socket, uint8_t encoder_number);
 

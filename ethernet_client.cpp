@@ -18,7 +18,8 @@
 #define TX_BYTECOUNT                    1024
 const char *dataCollectionCMD;
 
-
+std::chrono::time_point<std::chrono::high_resolution_clock> start_time;
+std::chrono::time_point<std::chrono::high_resolution_clock> end_time;
 
 // NOTE:
 // HOST_IP_ADDRESS = "169.254.255.252"
@@ -37,13 +38,12 @@ enum DataCollectionStateMachine {
     SM_SEND_READY_STATE_TO_PS,
     SM_WAIT_FOR_PS_HANDSHAKE,
     SM_SEND_START_DATA_COLLECTIION_CMD_TO_PS,
+    SM_START_DATA_COLLECTION,
+    SM_CLOSE_SOCKET,
     SM_EXIT
 };
 
 using namespace std;
-
-
-
 
 static bool isInteger(const char* str) {
     // Check if the string is empty
@@ -72,50 +72,94 @@ static bool isExitKeyPressed(){
     return false;
 }
 
+static float calculate_duration_as_float(chrono::high_resolution_clock::time_point start, chrono::high_resolution_clock::time_point end ){
+    std::chrono::duration<float> duration = end - start;
+    return duration.count();
+}
+
 // TODO: figure out valid return code for state machine success and failure
 static int DataCollectionStateMachine(int client_socket, fd_set readfds){
-    int handshake_state = SM_SEND_READY_STATE_TO_PS;
+    int state = SM_SEND_READY_STATE_TO_PS;
+    int ret_code = 0;
+
     char sendReadyStateCMD[] = "HOST: READY FOR DATA COLLECTION";
     char startDataCollectionCMD[] = "HOST: START DATA COLLECTION";
     char recvBuffer[100] = {0}; 
-    while(handshake_state != SM_EXIT){
-        switch(handshake_state){
+
+    while(state != SM_EXIT){
+        switch(state){
             case SM_SEND_READY_STATE_TO_PS:{
                 udp_transmit(client_socket, sendReadyStateCMD , strlen(sendReadyStateCMD));
-                handshake_state = SM_WAIT_FOR_PS_HANDSHAKE;
+                state = SM_WAIT_FOR_PS_HANDSHAKE;
                 break;
             }
             case SM_WAIT_FOR_PS_HANDSHAKE:{
-                int ret_code = udp_nonblocking_receive(client_socket, recvBuffer, sizeof(recvBuffer));
+                ret_code = udp_nonblocking_receive(client_socket, recvBuffer, sizeof(recvBuffer));
                 if (ret_code == UDP_DATA_IS_AVAILBLE){
                     if (strcmp(recvBuffer, "ZYNQ: READY FOR DATA COLLECTION") == 0){
                         cout << "Received Message from Zynq: READY FOR DATA COLLECTION" << endl;
-                        handshake_state = SM_SEND_START_DATA_COLLECTIION_CMD_TO_PS;
+                        state = SM_SEND_START_DATA_COLLECTIION_CMD_TO_PS;
                         break;
                     } else {
-                        handshake_state = SM_SEND_READY_STATE_TO_PS;
+                        state = SM_SEND_READY_STATE_TO_PS;
                         break;
                     }
                 } else if (ret_code == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT){
-                    handshake_state = SM_SEND_READY_STATE_TO_PS;
+                    state = SM_SEND_READY_STATE_TO_PS;
                     break;
                 } else {
-                    cout << "[UDP_ERROR] - return code: " << ret_code << endl;;
-                    close(client_socket);
-                    return ret_code;
+                    state = SM_CLOSE_SOCKET;
+                    break;
                 }
             }
             case SM_SEND_START_DATA_COLLECTIION_CMD_TO_PS:{
                 cout << "Press [ENTER] to start data collection ..." << endl;
                 getchar();
                 udp_transmit(client_socket, startDataCollectionCMD, 28);
-                handshake_state = SM_EXIT;
+                state = SM_START_DATA_COLLECTION;
+                break;
+            }
+
+            case SM_START_DATA_COLLECTION:{
+                start_time = std::chrono::high_resolution_clock::now();
+                float time_elapsed = 0; 
+
+                uint32_t data_buffer[1446] = {0};
+                char endDataCollectionCmd[] = "CLIENT: STOP_DATA_COLLECTION";
+
+                while(time_elapsed < 3){
+
+                    ret_code = udp_nonblocking_receive(client_socket, data_buffer, 1446);
+                    
+                    for (int i = 0; i < 1446/4; i++){
+                        printf("data_buffer[%d]: 0x%X\n", i, data_buffer[i]);
+                    }
+
+                    end_time = std::chrono::high_resolution_clock::now();
+                    time_elapsed = calculate_duration_as_float(start_time, end_time);
+                }
+
+
+                udp_transmit(client_socket, endDataCollectionCmd, sizeof(endDataCollectionCmd));
+
+                state = SM_CLOSE_SOCKET;
+                break;
+            }
+
+            case SM_CLOSE_SOCKET:{
+
+                if (ret_code > 1){
+                    cout << "[UDP_ERROR] - return code: " << ret_code << " | Make sure that server application is executing on the processor! The udp connection may closed." << endl;;
+                }
+            
+                close(client_socket);
+                state = SM_EXIT;
                 break;
             }
         }
     }
 
-    return 1;
+    return ret_code;
 }
 
 using namespace std;
@@ -178,37 +222,6 @@ int main(int argc, char *argv[]) {
 
     DataCollectionStateMachine(client_socket, readfds);
 
-
-    // getchar();
-
-
-    // struct timeval timeout;
-
-    // // using chrono library to get relative time 
-    // std::chrono::time_point<std::chrono::system_clock> start, end;
-    // start = std::chrono::system_clock::now();
-
-    // std::chrono::duration<double> elapsed_seconds;
-    // double elapsed_time = 0; 
-
-
-    // while(1){
-
-    //     // TIMED CAPTURE
-    //     // checks if timed capture based on args passed to ethernet client program
-    //     if (timedCaptureFlag){
-    //         end = std::chrono::system_clock::now();
-    //         elapsed_seconds = end - start;
-    //         elapsed_time = std::chrono::duration<double>(elapsed_seconds).count();
-
-    //         if (elapsed_time > dataCollectionDuration){
-    //             break;
-    //         }
-        
-    //     }
-    // }
-
-    udp_close(&client_socket);
     return 0;
 }
 
