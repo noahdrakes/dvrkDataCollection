@@ -15,11 +15,13 @@
 #include <ctime>
 #include "AmpIO.h"
 #include "pthread.h"
+#include <atomic>
 
 // dvrk libs
 #include "BasePort.h"
 #include "PortFactory.h"
 #include "EthBasePort.h"
+
 
 using namespace std;
 
@@ -27,8 +29,13 @@ using namespace std;
 // on the MTU) in EthUdpPort.cpp
 #define UDP_MAX_PACKET_SIZE     1446
 
+// bffers for previous double buffer setup
 uint32_t buffer1[UDP_MAX_PACKET_SIZE];
 uint32_t buffer2[UDP_MAX_PACKET_SIZE];
+
+// buffer for new db setup 
+    // 2d static array that we can switch between 
+uint32_t buf[2][1500];
 
 // start time for data collection timestamps
 std::chrono::time_point<std::chrono::high_resolution_clock> start_time;
@@ -50,6 +57,10 @@ enum DataCollectionStateMachine {
     SM_WAIT_FOR_HOST_HANDSHAKE,
     SM_WAIT_FOR_HOST_START_CMD,
     SM_START_DATA_COLLECTION,
+    SM_CHECK_FOR_STOP_DATA_COLLECTION_CMD,
+    SM_START_CONSUMER_THREAD,
+    SM_PRODUCE_DATA,
+    SM_CONSUME_DATA,
     SM_CLOSE_SOCKET,
     SM_EXIT
 };
@@ -72,28 +83,24 @@ enum UDP_RETURN_CODES{
 };
 
 // Socket Data struct
-struct client_udp{
+struct udp_info{
     int socket;
     struct sockaddr_in Addr;
     socklen_t AddrLen;
+} client; // this is global bc there will only be one
+
+
+struct DB{
+    uint32_t double_buffer[2][UDP_MAX_PACKET_SIZE/4]; //note: changed from 1500 which makes sense
+    uint8_t prod_buf;
+    uint8_t cons_buf;
+    atomic_uint8_t busy;
+    uint16_t dataBufferSize; 
+
+    // bad design since client doesnt belong in db struct
+    // probably should make this object global
+    // udp_info *client;
 };
-
-// Double Buffer struct to hold all parameters
-// relating to the double buffer 
-typedef struct {
-    uint32_t *currentBuffer;            // buffer1
-    uint32_t *nextBuffer;               // buffer2
-    uint16_t dataBufferSize;            // hold the size of the data buffers in bytes
-    pthread_mutex_t mutex;              // mutex to sync the threads for double buffer
-    pthread_cond_t dataReadyCond;       // cond var used to signal that the producer thread finished retrieving data
-    pthread_cond_t bufferProcessedCond; // cond var used to signal that the consumer thread finished sending data to client
-    int dataReady;                      // data ready conditional
-
-    // relevent members for sending and processing data
-    client_udp *client;
-    BasePort *port;
-    AmpIO *board;
-} DoubleBuffer;
 
 
 
@@ -118,7 +125,7 @@ static int isDataAvailable(fd_set *readfds, int client_socket){
 }
 
 // nonblocking udp recv function. 
-static int udp_recvfrom_nonblocking(client_udp *client, void *buffer, size_t len){
+static int udp_recvfrom_nonblocking(udp_info *client, void *buffer, size_t len){
 
     fd_set readfds;
     FD_ZERO(&readfds);
@@ -141,8 +148,8 @@ static int udp_recvfrom_nonblocking(client_udp *client, void *buffer, size_t len
     return ret_code;
 }
 
-// udp transmit function. wrapper for sendo that abstracts the client_udp_struct
-static int udp_transmit(client_udp *client, void * data, int size){
+// udp transmit function. wrapper for sendo that abstracts the udp_info_struct
+static int udp_transmit(udp_info *client, void * data, int size){
     
     // change UDP_MAX_QUADLET to 
     if (size > UDP_MAX_PACKET_SIZE){
@@ -193,6 +200,8 @@ static uint16_t calculate_sizeof_sample(uint8_t num_encoders, uint8_t num_motors
 
 }
 
+// might need some renaming 
+
 // calculates the # of samples per packet in quadlets
 static uint16_t calculate_samples_per_packet(uint8_t num_encoders, uint8_t num_motors){
     return ((UDP_MAX_PACKET_SIZE/4)/ calculate_sizeof_sample(num_encoders, num_motors) );
@@ -228,7 +237,6 @@ static bool load_data_buffer(BasePort *Port, AmpIO *Board, uint32_t *data_buffer
     uint8_t num_motors = Board->GetNumMotors();
     
     uint16_t samples_per_packet = calculate_samples_per_packet(num_encoders, num_motors);
-    
     uint16_t count = 0;
 
     // CAPTURE DATA 
@@ -263,125 +271,48 @@ static bool load_data_buffer(BasePort *Port, AmpIO *Board, uint32_t *data_buffer
             uint32_t motor_status = (Board->GetMotorStatus(i));
             data_buffer[count++] = (uint32_t)(((motor_status & 0x0000FFFF) << 16) | (motor_curr & 0x0000FFFF));
         }
-
-    
     }
     return true;
 }
 
-
-void *producer(void *arg) {
-    DoubleBuffer *double_buffer = (DoubleBuffer *)arg;
-    uint32_t data_buffer[UDP_MAX_PACKET_SIZE/4] = {0};
-
-    start_time = std::chrono::high_resolution_clock::now();
-
-    while(!stop_data_collection_flag){
-        char recv_buffer[100] = {0};
-        if (udp_recvfrom_nonblocking(double_buffer->client, recv_buffer, sizeof(recv_buffer)) == UDP_DATA_IS_AVAILBLE){
-            if(strcmp(recv_buffer, "CLIENT: STOP_DATA_COLLECTION") == 0){
-                stop_data_collection_flag = true;
-                pthread_cond_signal(&double_buffer->dataReadyCond); // Signal to ensure consumer can exit
-                pthread_mutex_unlock(&double_buffer->mutex);
-                continue;
-            } else {
-                // something went terribly wrong
-                cout << "[error] unexpected UDP message. Host and Processor are out of sync" << endl;
-                stop_data_collection_flag = true;
-                continue;
-            }
-        }
-
-        if(!load_data_buffer(double_buffer->port, double_buffer->board, data_buffer)){
-            stop_data_collection_flag = true;
-            break;
-        }
-
-        pthread_mutex_lock(&double_buffer->mutex);
-
-        while(double_buffer->dataReady){
-            pthread_cond_wait(&double_buffer->bufferProcessedCond, &double_buffer->mutex);
-        }
-
-        //TODO: MAKE SURE DOUBLE BUFFER DATASIZE IS 1400
-        memcpy(double_buffer->nextBuffer, data_buffer, double_buffer->dataBufferSize);
-        double_buffer->dataReady = 1;
-        pthread_cond_signal(&double_buffer->dataReadyCond);
-        pthread_mutex_unlock(&double_buffer->mutex);
-    }    
-
-    return NULL;
+void init_db(DB *db, AmpIO *board){
+    db->cons_buf = 0;
+    db->prod_buf = 0;
+    db->busy = 0;
+    db->dataBufferSize = calculate_quadlets_per_packet(board->GetNumEncoders(), board->GetNumMotors()) * 4;
 }
 
 
-//TODO: NEED TO FIGURE OUT WHERE CONSUMER STOPS
-void *consumer(void *arg) {
-    DoubleBuffer *double_buffer = (DoubleBuffer *)arg;
-    int count = 0;
 
+void * consume_data(void *arg){
+    DB* db = (DB *) arg;
+    
     while(!stop_data_collection_flag){
-        pthread_mutex_lock(&double_buffer->mutex);
-
-        while(!double_buffer->dataReady && !stop_data_collection_flag){
-            pthread_cond_wait(&double_buffer->dataReadyCond, &double_buffer->mutex);
-        }
-
-        if (stop_data_collection_flag) {
-            pthread_mutex_unlock(&double_buffer->mutex);
+        
+        if (!db->busy){
             continue;
         }
 
-        uint32_t *temp = double_buffer->currentBuffer;
-        double_buffer->currentBuffer = double_buffer->nextBuffer;
-        double_buffer->nextBuffer = temp;
+        db->busy = 0;
 
-        double_buffer->dataReady = 0;
-        pthread_cond_signal(&double_buffer->bufferProcessedCond);
-        pthread_mutex_unlock(&double_buffer->mutex);
+        udp_transmit(&client, db->double_buffer[db->cons_buf], db->dataBufferSize);
 
-        udp_transmit(double_buffer->client, double_buffer->currentBuffer, calculate_quadlets_per_packet(double_buffer->board->GetNumEncoders(), double_buffer->board->GetNumMotors()) * 4);
-        cout << "count: " << count++ << endl;
+        db->cons_buf = (db->cons_buf + 1) % 2;
     }
 
     return NULL;
+
 }
 
-
-static void init_double_buffer(pthread_t *producer_t, pthread_t *consumer_t, DoubleBuffer *double_buffer, BasePort *port, AmpIO *board, client_udp *client){
-
-    double_buffer->currentBuffer = buffer1;
-    double_buffer->nextBuffer = buffer2;
-    double_buffer->dataReady = 0;
-    double_buffer->client = client;
-    double_buffer->port = port;
-    double_buffer->board = board;
-    double_buffer->dataBufferSize = calculate_quadlets_per_packet(board->GetNumEncoders(), board->GetNumMotors()) * 4;
-    
-    pthread_mutex_init(&double_buffer->mutex, NULL);
-    pthread_cond_init(&double_buffer->dataReadyCond, NULL);
-    pthread_cond_init(&double_buffer->bufferProcessedCond, NULL);
-
-    pthread_create(producer_t,NULL,producer, double_buffer);
-    pthread_create(consumer_t,NULL,consumer, double_buffer);
-
-    pthread_join(*producer_t, NULL);
-    pthread_join(*consumer_t, NULL);
-
-    pthread_mutex_destroy(&double_buffer->mutex);
-    pthread_cond_destroy(&double_buffer->dataReadyCond);
-    pthread_cond_destroy(&double_buffer->bufferProcessedCond);
-}
-
-
-static int dataCollectionStateMachine(client_udp *client, BasePort *port, AmpIO *board, DoubleBuffer *double_buffer) {
+static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *board, DB *db) {
     cout << "Start Handshake Routine..." << endl;
 
     int state = SM_WAIT_FOR_HOST_HANDSHAKE;
     char recvBuffer[100] = {0};
     
-    char initiateDataCollection[] = "ZYNQ: READY FOR DATA COLLECTION";
-
+    // condition variable 
     int ret_code = 0;
+
     while(state != SM_EXIT){     
 
         switch(state){
@@ -394,8 +325,6 @@ static int dataCollectionStateMachine(client_udp *client, BasePort *port, AmpIO 
                         break;
                     } 
                 } else if (ret_code == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT){
-                    // cout << "what about here " << endl;
-                    // state = SM_WAIT_FOR_HOST_HANDSHAKE;
                     break;
                 } else {
                     ret_code = SM_UDP_ERROR;
@@ -404,7 +333,11 @@ static int dataCollectionStateMachine(client_udp *client, BasePort *port, AmpIO 
                 }
             }
 
+            // add more states for stop and start data collection
+
             case SM_SEND_READY_STATE_TO_HOST:{
+                char initiateDataCollection[] = "ZYNQ: READY FOR DATA COLLECTION";
+
                 if(udp_transmit(client, initiateDataCollection, strlen(initiateDataCollection)) < 1 ){
                     perror("sendto failed");
                     cout << "client addr is invalid." << endl;
@@ -441,12 +374,72 @@ static int dataCollectionStateMachine(client_udp *client, BasePort *port, AmpIO 
 
             case SM_START_DATA_COLLECTION:{
 
-                pthread_t producer_t;
+                // SET DOUBLE BUFFER VARIABLES
+                db->cons_buf = 0;
+                db->prod_buf = 0;
+                db->busy = 0;
+                db->dataBufferSize = calculate_quadlets_per_packet(board->GetNumEncoders(), board->GetNumMotors()) * 4;
+
+                // set start time for data collection
+                start_time = std::chrono::high_resolution_clock::now();
+                state = SM_START_CONSUMER_THREAD;
+                break;
+            }
+
+            case SM_START_CONSUMER_THREAD:{
+
                 pthread_t consumer_t;
 
-                init_double_buffer(&producer_t, &consumer_t, double_buffer, port, board, client);
+                if (pthread_create(&consumer_t, nullptr, consume_data, db) != 0) {
+                    std::cerr << "Error creating consumer thread" << std::endl;
+                    return 1;
+                }
 
-                state = SM_CLOSE_SOCKET;
+                pthread_detach(consumer_t);
+
+                state = SM_PRODUCE_DATA;
+                break;
+            }
+
+            case SM_PRODUCE_DATA:{
+                
+                // if busy then just repeat
+                if(db->busy){
+                    state = SM_PRODUCE_DATA;
+                    break;
+                }
+
+                load_data_buffer(port, board, db->double_buffer[db->prod_buf]);
+
+                db->busy = 1;
+
+                db->prod_buf = (db->prod_buf + 1) % 2;
+
+                state = SM_CHECK_FOR_STOP_DATA_COLLECTION_CMD;
+                break;
+
+            }
+
+            case SM_CHECK_FOR_STOP_DATA_COLLECTION_CMD:{
+                char recv_buffer[29];
+                
+                if (udp_recvfrom_nonblocking(client, recv_buffer, 29) == UDP_DATA_IS_AVAILBLE){
+
+                    if(strcmp(recv_buffer, "CLIENT: STOP_DATA_COLLECTION") == 0){
+                        stop_data_collection_flag = true;
+                        db->cons_buf = 1;
+                        state = SM_CLOSE_SOCKET;
+                        break;
+                    } else {
+                        // something went terribly wrong
+                        cout << "[error] unexpected UDP message. Host and Processor are out of sync" << endl;
+                        ret_code = SM_UDP_ERROR;
+                        state = SM_CLOSE_SOCKET;
+                        break;
+                    }
+                }
+                
+                state = SM_PRODUCE_DATA;
                 break;
             }
 
@@ -463,7 +456,7 @@ static int dataCollectionStateMachine(client_udp *client, BasePort *port, AmpIO 
             }
         }
     }
-    return true;
+    return SM_SUCCESS;
 }
 
 
@@ -500,7 +493,8 @@ int main(int argc, char *argv[]) {
     cout << "MotorCurr: " << Board->GetMotorCurrent(0) << endl;
 
     // create client object and set the addLen to the sizeof of the sockaddr_in struct
-    client_udp client;
+    // rename maybe udp_info
+    // udp_info client;
     client.AddrLen = sizeof(client.Addr);
 
     // initiate socket connection to port 12345
@@ -511,9 +505,18 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
-    DoubleBuffer double_buffer;
+    DB db;
+    init_db(&db, Board);
 
-    dataCollectionStateMachine(&client, Port, Board, &double_buffer);
+
+    dataCollectionStateMachine(&client, Port, Board, &db);
+
+    // uint32_t data_buffer[350];
+    // load_data_buffer(Port, Board, data_buffer);
+
+    // for (int i = 0; i < 350; i++){
+    //     printf("data_buffer[%d]  = 0x%X\n", i, data_buffer[i]);
+    // }
 
     return 0;
 }

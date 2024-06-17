@@ -61,6 +61,10 @@
         "execution": "cpp",
         "optional": "cpp",
         "sstream": "cpp",
-        "variant": "cpp"
+        "variant": "cpp",
+        "__split_buffer": "cpp",
+        "complex": "cpp",
+        "fstream": "cpp",
+        "iomanip": "cpp"
     }
 }

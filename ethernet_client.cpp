@@ -12,6 +12,8 @@
 #include <chrono>
 #include <ctime>
 #include <cstdlib>
+#include <fstream>
+
 
 
 
@@ -125,13 +127,17 @@ static int DataCollectionStateMachine(int client_socket, fd_set readfds){
                 float time_elapsed = 0; 
                 int count = 0;
 
-                uint32_t data_buffer[1400] = {0};
+                uint32_t data_buffer[350] = {0};
                 char endDataCollectionCmd[] = "CLIENT: STOP_DATA_COLLECTION";
                 uint32_t temp = 0;
 
+                // ofstream myFile;
+                // myFile.open("data.csv");
+
+
                 while(time_elapsed < 3){
 
-                    ret_code = udp_nonblocking_receive(client_socket, data_buffer, 1400);
+                    ret_code = udp_nonblocking_receive(client_socket, data_buffer, sizeof(data_buffer));
 
                     if (ret_code == UDP_DATA_IS_AVAILBLE){
                         
@@ -141,7 +147,22 @@ static int DataCollectionStateMachine(int client_socket, fd_set readfds){
                         // packet are not the same
                         if (temp != data_buffer[0]){
                             cout << "count: " << count++ << endl;
+                            // for (int i = 0; i < 1400; i++){
+                            //     printf("databuffer[%d] =  0x%X\n", i, data_buffer[i]);
+                            // }
                         }
+
+                        // cout << "count: " << count++ << endl;
+
+                        // for (int i = 0; i < 350; i+=15){
+                        //     for (int j = i; j < i+15; j++){
+                        //         myFile << data_buffer[j] << ",";
+                        //     }
+
+                        //     myFile << "\n";
+                        // }
+
+                        
                         
                     }
                     
@@ -150,8 +171,14 @@ static int DataCollectionStateMachine(int client_socket, fd_set readfds){
                     time_elapsed = calculate_duration_as_float(start_time, end_time);
                 }
 
+                // myFile.close();
 
-                udp_transmit(client_socket, endDataCollectionCmd, sizeof(endDataCollectionCmd));
+
+                if( !udp_transmit(client_socket, endDataCollectionCmd, sizeof(endDataCollectionCmd)) ){
+                    cout << "broo its falso bro" << endl;
+                }
+            
+                
 
                 state = SM_CLOSE_SOCKET;
                 break;
