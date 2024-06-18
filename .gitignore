@@ -1,2 +1,5 @@
 /build/
 *.vscode
+/src/CMakeFiles/
+/src/CMakeLists.txt
+src/cmake_install_cmake
