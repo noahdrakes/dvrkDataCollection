@@ -130,41 +130,41 @@ udp_lib/fast:
 .PHONY : udp_lib/fast
 
 #=============================================================================
-# Target rules for targets named ethernet_client
+# Target rules for targets named dataCollection
 
 # Build rule for target.
-ethernet_client: cmake_check_build_system
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 ethernet_client
-.PHONY : ethernet_client
+dataCollection: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 dataCollection
+.PHONY : dataCollection
 
 # fast build rule for target.
-ethernet_client/fast:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/ethernet_client.dir/build.make CMakeFiles/ethernet_client.dir/build
-.PHONY : ethernet_client/fast
+dataCollection/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/dataCollection.dir/build.make CMakeFiles/dataCollection.dir/build
+.PHONY : dataCollection/fast
 
-ethernet_client.o: ethernet_client.cpp.o
-.PHONY : ethernet_client.o
+dataCollection.o: dataCollection.cpp.o
+.PHONY : dataCollection.o
 
 # target to build an object file
-ethernet_client.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/ethernet_client.dir/build.make CMakeFiles/ethernet_client.dir/ethernet_client.cpp.o
-.PHONY : ethernet_client.cpp.o
+dataCollection.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/dataCollection.dir/build.make CMakeFiles/dataCollection.dir/dataCollection.cpp.o
+.PHONY : dataCollection.cpp.o
 
-ethernet_client.i: ethernet_client.cpp.i
-.PHONY : ethernet_client.i
+dataCollection.i: dataCollection.cpp.i
+.PHONY : dataCollection.i
 
 # target to preprocess a source file
-ethernet_client.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/ethernet_client.dir/build.make CMakeFiles/ethernet_client.dir/ethernet_client.cpp.i
-.PHONY : ethernet_client.cpp.i
+dataCollection.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/dataCollection.dir/build.make CMakeFiles/dataCollection.dir/dataCollection.cpp.i
+.PHONY : dataCollection.cpp.i
 
-ethernet_client.s: ethernet_client.cpp.s
-.PHONY : ethernet_client.s
+dataCollection.s: dataCollection.cpp.s
+.PHONY : dataCollection.s
 
 # target to generate assembly for a file
-ethernet_client.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/ethernet_client.dir/build.make CMakeFiles/ethernet_client.dir/ethernet_client.cpp.s
-.PHONY : ethernet_client.cpp.s
+dataCollection.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/dataCollection.dir/build.make CMakeFiles/dataCollection.dir/dataCollection.cpp.s
+.PHONY : dataCollection.cpp.s
 
 udp_tx.o: udp_tx.cpp.o
 .PHONY : udp_tx.o
@@ -198,11 +198,11 @@ help:
 	@echo "... depend"
 	@echo "... edit_cache"
 	@echo "... rebuild_cache"
-	@echo "... ethernet_client"
+	@echo "... dataCollection"
 	@echo "... udp_lib"
-	@echo "... ethernet_client.o"
-	@echo "... ethernet_client.i"
-	@echo "... ethernet_client.s"
+	@echo "... dataCollection.o"
+	@echo "... dataCollection.i"
+	@echo "... dataCollection.s"
 	@echo "... udp_tx.o"
 	@echo "... udp_tx.i"
 	@echo "... udp_tx.s"

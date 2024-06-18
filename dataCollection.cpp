@@ -13,15 +13,22 @@
 #include <ctime>
 #include <cstdlib>
 #include <fstream>
+#include <string>
+#include "dataCollection.h"
+
+using namespace std;
 
 
-
-
-#define TX_BYTECOUNT                    1024
 const char *dataCollectionCMD;
 
 std::chrono::time_point<std::chrono::high_resolution_clock> start_time;
 std::chrono::time_point<std::chrono::high_resolution_clock> end_time;
+
+struct DC_Time{
+    std::chrono::time_point<std::chrono::high_resolution_clock> start_time;
+    std::chrono::time_point<std::chrono::high_resolution_clock> end_time;
+    float time_elapsed;
+}dc_time;
 
 // NOTE:
 // HOST_IP_ADDRESS = "169.254.255.252"
@@ -41,11 +48,18 @@ enum DataCollectionStateMachine {
     SM_WAIT_FOR_PS_HANDSHAKE,
     SM_SEND_START_DATA_COLLECTIION_CMD_TO_PS,
     SM_START_DATA_COLLECTION,
+    SM_RECV_DATA_COLLECTION_META_DATA,
+    SM_SEND_METADATA_RECV,
     SM_CLOSE_SOCKET,
     SM_EXIT
 };
 
-using namespace std;
+
+
+DataCollection :: DataCollection(){
+    cout << "constructor" << endl;
+}
+
 
 static bool isInteger(const char* str) {
     // Check if the string is empty
@@ -55,6 +69,10 @@ static bool isInteger(const char* str) {
 
     // Check if all characters in the string are digits
     return std::all_of(str, str + strlen(str), ::isdigit);
+}
+
+std::string uint32ToString(uint32_t value) {
+    return std::to_string(value);
 }
 
 static bool isExitKeyPressed(){
@@ -79,22 +97,88 @@ static float calculate_duration_as_float(chrono::high_resolution_clock::time_poi
     return duration.count();
 }
 
+static void load_meta_data(uint32_t *meta_data){
+    // store meta data into meta data struct
+    string hwVersString;
+
+    switch(meta_data[1]){
+        case 0x514C4131:{
+            hwVersString = "QLA1";
+        case 0x64524131:
+            hwVersString = "dRA1";
+        case 0x44514C41:
+            hwVersString = "dQLA";
+        }
+    };
+
+    dc_meta.HWVers = hwVersString;
+    dc_meta.num_encoders = (uint8_t) meta_data[2];
+    dc_meta.num_motors = (uint8_t) meta_data[3];
+    dc_meta.data_buffer_size = meta_data[4];
+    dc_meta.size_of_sample = meta_data[5];
+    dc_meta.samples_per_packet = meta_data[6];
+}
+
 // TODO: figure out valid return code for state machine success and failure
+// configure client as a library (start_colllect, stop_collect, init_collect) class
 static int DataCollectionStateMachine(int client_socket, fd_set readfds){
     int state = SM_SEND_READY_STATE_TO_PS;
     int ret_code = 0;
 
     char sendReadyStateCMD[] = "HOST: READY FOR DATA COLLECTION";
     char startDataCollectionCMD[] = "HOST: START DATA COLLECTION";
+    char sendMetaDataRecvd[] = "HOST: RECEIVED METADATA";
     char recvBuffer[100] = {0}; 
+    uint32_t meta_data[7] = {0};
 
     while(state != SM_EXIT){
         switch(state){
             case SM_SEND_READY_STATE_TO_PS:{
                 udp_transmit(client_socket, sendReadyStateCMD , strlen(sendReadyStateCMD));
+                state = SM_RECV_DATA_COLLECTION_META_DATA;
+                break;
+            }
+
+            // new pair 
+            case SM_RECV_DATA_COLLECTION_META_DATA:{
+                // recv meta data
+                ret_code = udp_nonblocking_receive(client_socket, meta_data, sizeof(meta_data));
+                if (ret_code == UDP_DATA_IS_AVAILBLE){
+                    if (meta_data[0] == METADATA_MAGIC_NUMBER){
+                        cout << "Received Message from Zynq: RECEIVED METADATA" << endl;
+
+                        load_meta_data(meta_data);
+
+                        cout << "-DATA COLLECTION METADATA -" << endl;
+                        cout << "Hardware Version: " << dc_meta.HWVers << endl;
+                        cout << "Num of Encoders:  " <<  +dc_meta.num_encoders << endl;
+                        cout << "Num of Motors: " << +dc_meta.num_motors << endl;
+                        cout << "DataBuffer Size: " << dc_meta.data_buffer_size << endl;
+                        cout << "Samples per Packet: " << dc_meta.samples_per_packet << endl;
+                        cout << "Sizoef Samples (in bytes): " << dc_meta.size_of_sample << endl;
+                        
+                        state = SM_SEND_METADATA_RECV;
+                        break;
+                    } else {
+                        state = SM_SEND_READY_STATE_TO_PS;
+                        break;
+                    }
+                } else if (ret_code == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT){
+                    state = SM_SEND_READY_STATE_TO_PS;
+                    break;
+                } else {
+                    state = SM_CLOSE_SOCKET;
+                    break;
+                }
+            }
+
+            case SM_SEND_METADATA_RECV:{
+                // transmit meta data recieved
+                udp_transmit(client_socket, sendMetaDataRecvd, sizeof(sendMetaDataRecvd));
                 state = SM_WAIT_FOR_PS_HANDSHAKE;
                 break;
             }
+
             case SM_WAIT_FOR_PS_HANDSHAKE:{
                 ret_code = udp_nonblocking_receive(client_socket, recvBuffer, sizeof(recvBuffer));
                 if (ret_code == UDP_DATA_IS_AVAILBLE){
@@ -103,11 +187,11 @@ static int DataCollectionStateMachine(int client_socket, fd_set readfds){
                         state = SM_SEND_START_DATA_COLLECTIION_CMD_TO_PS;
                         break;
                     } else {
-                        state = SM_SEND_READY_STATE_TO_PS;
+                        state = SM_SEND_METADATA_RECV;
                         break;
                     }
                 } else if (ret_code == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT){
-                    state = SM_SEND_READY_STATE_TO_PS;
+                    state = SM_SEND_METADATA_RECV;
                     break;
                 } else {
                     state = SM_CLOSE_SOCKET;
@@ -146,7 +230,7 @@ static int DataCollectionStateMachine(int client_socket, fd_set readfds){
                         // so im confirming that the timestamp from this packet and the previous 
                         // packet are not the same
                         if (temp != data_buffer[0]){
-                            cout << "count: " << count++ << endl;
+                            // cout << "count: " << count++ << endl;
                             // for (int i = 0; i < 1400; i++){
                             //     printf("databuffer[%d] =  0x%X\n", i, data_buffer[i]);
                             // }
@@ -199,6 +283,8 @@ static int DataCollectionStateMachine(int client_socket, fd_set readfds){
 
     return ret_code;
 }
+
+
 
 using namespace std;
 
@@ -257,6 +343,8 @@ int main(int argc, char *argv[]) {
     fd_set readfds;
 
     udp_init(&client_socket, boardID);
+
+    DataCollection *dc = new DataCollection();
 
     DataCollectionStateMachine(client_socket, readfds);
 

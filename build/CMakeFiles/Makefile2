@@ -64,7 +64,7 @@ CMAKE_BINARY_DIR = /Users/noahdrakes/Documents/research/dvrkDataCollection/build
 
 # The main recursive "all" target.
 all: CMakeFiles/udp_lib.dir/all
-all: CMakeFiles/ethernet_client.dir/all
+all: CMakeFiles/dataCollection.dir/all
 .PHONY : all
 
 # The main recursive "preinstall" target.
@@ -73,7 +73,7 @@ preinstall:
 
 # The main recursive "clean" target.
 clean: CMakeFiles/udp_lib.dir/clean
-clean: CMakeFiles/ethernet_client.dir/clean
+clean: CMakeFiles/dataCollection.dir/clean
 .PHONY : clean
 
 #=============================================================================
@@ -103,30 +103,30 @@ CMakeFiles/udp_lib.dir/clean:
 .PHONY : CMakeFiles/udp_lib.dir/clean
 
 #=============================================================================
-# Target rules for target CMakeFiles/ethernet_client.dir
+# Target rules for target CMakeFiles/dataCollection.dir
 
 # All Build rule for target.
-CMakeFiles/ethernet_client.dir/all: CMakeFiles/udp_lib.dir/all
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/ethernet_client.dir/build.make CMakeFiles/ethernet_client.dir/depend
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/ethernet_client.dir/build.make CMakeFiles/ethernet_client.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/Users/noahdrakes/Documents/research/dvrkDataCollection/build/CMakeFiles --progress-num=1,2 "Built target ethernet_client"
-.PHONY : CMakeFiles/ethernet_client.dir/all
+CMakeFiles/dataCollection.dir/all: CMakeFiles/udp_lib.dir/all
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/dataCollection.dir/build.make CMakeFiles/dataCollection.dir/depend
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/dataCollection.dir/build.make CMakeFiles/dataCollection.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/Users/noahdrakes/Documents/research/dvrkDataCollection/build/CMakeFiles --progress-num=1,2 "Built target dataCollection"
+.PHONY : CMakeFiles/dataCollection.dir/all
 
 # Build rule for subdir invocation for target.
-CMakeFiles/ethernet_client.dir/rule: cmake_check_build_system
+CMakeFiles/dataCollection.dir/rule: cmake_check_build_system
 	$(CMAKE_COMMAND) -E cmake_progress_start /Users/noahdrakes/Documents/research/dvrkDataCollection/build/CMakeFiles 4
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/ethernet_client.dir/all
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/dataCollection.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /Users/noahdrakes/Documents/research/dvrkDataCollection/build/CMakeFiles 0
-.PHONY : CMakeFiles/ethernet_client.dir/rule
+.PHONY : CMakeFiles/dataCollection.dir/rule
 
 # Convenience name for target.
-ethernet_client: CMakeFiles/ethernet_client.dir/rule
-.PHONY : ethernet_client
+dataCollection: CMakeFiles/dataCollection.dir/rule
+.PHONY : dataCollection
 
 # clean rule for target.
-CMakeFiles/ethernet_client.dir/clean:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/ethernet_client.dir/build.make CMakeFiles/ethernet_client.dir/clean
-.PHONY : CMakeFiles/ethernet_client.dir/clean
+CMakeFiles/dataCollection.dir/clean:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/dataCollection.dir/build.make CMakeFiles/dataCollection.dir/clean
+.PHONY : CMakeFiles/dataCollection.dir/clean
 
 #=============================================================================
 # Special targets to cleanup operation of make.
