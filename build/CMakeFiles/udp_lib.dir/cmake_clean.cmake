@@ -1,6 +1,6 @@
 file(REMOVE_RECURSE
-  "CMakeFiles/udp_lib.dir/udp_tx.cpp.o"
-  "CMakeFiles/udp_lib.dir/udp_tx.cpp.o.d"
+  "CMakeFiles/udp_lib.dir/src/udp_tx.cpp.o"
+  "CMakeFiles/udp_lib.dir/src/udp_tx.cpp.o.d"
   "libudp_lib.a"
   "libudp_lib.pdb"
 )

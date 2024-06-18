@@ -146,7 +146,7 @@ CMAKE_PROJECT_DESCRIPTION:STATIC=
 CMAKE_PROJECT_HOMEPAGE_URL:STATIC=
 
 //Value Computed by CMake
-CMAKE_PROJECT_NAME:STATIC=DataCollection
+CMAKE_PROJECT_NAME:STATIC=DVRKDATACOLLECTION
 
 //Path to a program.
 CMAKE_RANLIB:FILEPATH=/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ranlib
@@ -209,6 +209,15 @@ CMAKE_STRIP:FILEPATH=/Applications/Xcode.app/Contents/Developer/Toolchains/Xcode
 // during the make.  This is useful for debugging only. With Visual
 // Studio IDE projects all commands are done without /nologo.
 CMAKE_VERBOSE_MAKEFILE:BOOL=FALSE
+
+//Value Computed by CMake
+DVRKDATACOLLECTION_BINARY_DIR:STATIC=/Users/noahdrakes/Documents/research/dvrkDataCollection/build
+
+//Value Computed by CMake
+DVRKDATACOLLECTION_IS_TOP_LEVEL:STATIC=ON
+
+//Value Computed by CMake
+DVRKDATACOLLECTION_SOURCE_DIR:STATIC=/Users/noahdrakes/Documents/research/dvrkDataCollection
 
 //Value Computed by CMake
 DataCollection_BINARY_DIR:STATIC=/Users/noahdrakes/Documents/research/dvrkDataCollection/build

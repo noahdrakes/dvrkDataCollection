@@ -69,32 +69,47 @@ include CMakeFiles/dataCollection.dir/progress.make
 # Include the compile flags for this target's objects.
 include CMakeFiles/dataCollection.dir/flags.make
 
-CMakeFiles/dataCollection.dir/dataCollection.cpp.o: CMakeFiles/dataCollection.dir/flags.make
-CMakeFiles/dataCollection.dir/dataCollection.cpp.o: /Users/noahdrakes/Documents/research/dvrkDataCollection/dataCollection.cpp
-CMakeFiles/dataCollection.dir/dataCollection.cpp.o: CMakeFiles/dataCollection.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/Users/noahdrakes/Documents/research/dvrkDataCollection/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_1) "Building CXX object CMakeFiles/dataCollection.dir/dataCollection.cpp.o"
-	/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/dataCollection.dir/dataCollection.cpp.o -MF CMakeFiles/dataCollection.dir/dataCollection.cpp.o.d -o CMakeFiles/dataCollection.dir/dataCollection.cpp.o -c /Users/noahdrakes/Documents/research/dvrkDataCollection/dataCollection.cpp
+CMakeFiles/dataCollection.dir/src/dataCollection.cpp.o: CMakeFiles/dataCollection.dir/flags.make
+CMakeFiles/dataCollection.dir/src/dataCollection.cpp.o: /Users/noahdrakes/Documents/research/dvrkDataCollection/src/dataCollection.cpp
+CMakeFiles/dataCollection.dir/src/dataCollection.cpp.o: CMakeFiles/dataCollection.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/Users/noahdrakes/Documents/research/dvrkDataCollection/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_1) "Building CXX object CMakeFiles/dataCollection.dir/src/dataCollection.cpp.o"
+	/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/dataCollection.dir/src/dataCollection.cpp.o -MF CMakeFiles/dataCollection.dir/src/dataCollection.cpp.o.d -o CMakeFiles/dataCollection.dir/src/dataCollection.cpp.o -c /Users/noahdrakes/Documents/research/dvrkDataCollection/src/dataCollection.cpp
 
-CMakeFiles/dataCollection.dir/dataCollection.cpp.i: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing CXX source to CMakeFiles/dataCollection.dir/dataCollection.cpp.i"
-	/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/noahdrakes/Documents/research/dvrkDataCollection/dataCollection.cpp > CMakeFiles/dataCollection.dir/dataCollection.cpp.i
+CMakeFiles/dataCollection.dir/src/dataCollection.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing CXX source to CMakeFiles/dataCollection.dir/src/dataCollection.cpp.i"
+	/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/noahdrakes/Documents/research/dvrkDataCollection/src/dataCollection.cpp > CMakeFiles/dataCollection.dir/src/dataCollection.cpp.i
 
-CMakeFiles/dataCollection.dir/dataCollection.cpp.s: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/dataCollection.dir/dataCollection.cpp.s"
-	/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/noahdrakes/Documents/research/dvrkDataCollection/dataCollection.cpp -o CMakeFiles/dataCollection.dir/dataCollection.cpp.s
+CMakeFiles/dataCollection.dir/src/dataCollection.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/dataCollection.dir/src/dataCollection.cpp.s"
+	/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/noahdrakes/Documents/research/dvrkDataCollection/src/dataCollection.cpp -o CMakeFiles/dataCollection.dir/src/dataCollection.cpp.s
+
+CMakeFiles/dataCollection.dir/lib/udp_tx.cpp.o: CMakeFiles/dataCollection.dir/flags.make
+CMakeFiles/dataCollection.dir/lib/udp_tx.cpp.o: /Users/noahdrakes/Documents/research/dvrkDataCollection/lib/udp_tx.cpp
+CMakeFiles/dataCollection.dir/lib/udp_tx.cpp.o: CMakeFiles/dataCollection.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/Users/noahdrakes/Documents/research/dvrkDataCollection/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Building CXX object CMakeFiles/dataCollection.dir/lib/udp_tx.cpp.o"
+	/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/dataCollection.dir/lib/udp_tx.cpp.o -MF CMakeFiles/dataCollection.dir/lib/udp_tx.cpp.o.d -o CMakeFiles/dataCollection.dir/lib/udp_tx.cpp.o -c /Users/noahdrakes/Documents/research/dvrkDataCollection/lib/udp_tx.cpp
+
+CMakeFiles/dataCollection.dir/lib/udp_tx.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing CXX source to CMakeFiles/dataCollection.dir/lib/udp_tx.cpp.i"
+	/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/noahdrakes/Documents/research/dvrkDataCollection/lib/udp_tx.cpp > CMakeFiles/dataCollection.dir/lib/udp_tx.cpp.i
+
+CMakeFiles/dataCollection.dir/lib/udp_tx.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/dataCollection.dir/lib/udp_tx.cpp.s"
+	/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/noahdrakes/Documents/research/dvrkDataCollection/lib/udp_tx.cpp -o CMakeFiles/dataCollection.dir/lib/udp_tx.cpp.s
 
 # Object files for target dataCollection
 dataCollection_OBJECTS = \
-"CMakeFiles/dataCollection.dir/dataCollection.cpp.o"
+"CMakeFiles/dataCollection.dir/src/dataCollection.cpp.o" \
+"CMakeFiles/dataCollection.dir/lib/udp_tx.cpp.o"
 
 # External object files for target dataCollection
 dataCollection_EXTERNAL_OBJECTS =
 
-dataCollection: CMakeFiles/dataCollection.dir/dataCollection.cpp.o
+dataCollection: CMakeFiles/dataCollection.dir/src/dataCollection.cpp.o
+dataCollection: CMakeFiles/dataCollection.dir/lib/udp_tx.cpp.o
 dataCollection: CMakeFiles/dataCollection.dir/build.make
-dataCollection: libudp_lib.a
 dataCollection: CMakeFiles/dataCollection.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --bold --progress-dir=/Users/noahdrakes/Documents/research/dvrkDataCollection/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Linking CXX executable dataCollection"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --bold --progress-dir=/Users/noahdrakes/Documents/research/dvrkDataCollection/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_3) "Linking CXX executable dataCollection"
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/dataCollection.dir/link.txt --verbose=$(VERBOSE)
 
 # Rule to build all files generated by this target.

@@ -1,6 +1,8 @@
 file(REMOVE_RECURSE
-  "CMakeFiles/dataCollection.dir/dataCollection.cpp.o"
-  "CMakeFiles/dataCollection.dir/dataCollection.cpp.o.d"
+  "CMakeFiles/dataCollection.dir/lib/udp_tx.cpp.o"
+  "CMakeFiles/dataCollection.dir/lib/udp_tx.cpp.o.d"
+  "CMakeFiles/dataCollection.dir/src/dataCollection.cpp.o"
+  "CMakeFiles/dataCollection.dir/src/dataCollection.cpp.o.d"
   "dataCollection"
   "dataCollection.pdb"
 )

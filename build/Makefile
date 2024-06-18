@@ -117,19 +117,6 @@ depend:
 .PHONY : depend
 
 #=============================================================================
-# Target rules for targets named udp_lib
-
-# Build rule for target.
-udp_lib: cmake_check_build_system
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 udp_lib
-.PHONY : udp_lib
-
-# fast build rule for target.
-udp_lib/fast:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/udp_lib.dir/build.make CMakeFiles/udp_lib.dir/build
-.PHONY : udp_lib/fast
-
-#=============================================================================
 # Target rules for targets named dataCollection
 
 # Build rule for target.
@@ -142,53 +129,53 @@ dataCollection/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/dataCollection.dir/build.make CMakeFiles/dataCollection.dir/build
 .PHONY : dataCollection/fast
 
-dataCollection.o: dataCollection.cpp.o
-.PHONY : dataCollection.o
+lib/udp_tx.o: lib/udp_tx.cpp.o
+.PHONY : lib/udp_tx.o
 
 # target to build an object file
-dataCollection.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/dataCollection.dir/build.make CMakeFiles/dataCollection.dir/dataCollection.cpp.o
-.PHONY : dataCollection.cpp.o
+lib/udp_tx.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/dataCollection.dir/build.make CMakeFiles/dataCollection.dir/lib/udp_tx.cpp.o
+.PHONY : lib/udp_tx.cpp.o
 
-dataCollection.i: dataCollection.cpp.i
-.PHONY : dataCollection.i
+lib/udp_tx.i: lib/udp_tx.cpp.i
+.PHONY : lib/udp_tx.i
 
 # target to preprocess a source file
-dataCollection.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/dataCollection.dir/build.make CMakeFiles/dataCollection.dir/dataCollection.cpp.i
-.PHONY : dataCollection.cpp.i
+lib/udp_tx.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/dataCollection.dir/build.make CMakeFiles/dataCollection.dir/lib/udp_tx.cpp.i
+.PHONY : lib/udp_tx.cpp.i
 
-dataCollection.s: dataCollection.cpp.s
-.PHONY : dataCollection.s
+lib/udp_tx.s: lib/udp_tx.cpp.s
+.PHONY : lib/udp_tx.s
 
 # target to generate assembly for a file
-dataCollection.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/dataCollection.dir/build.make CMakeFiles/dataCollection.dir/dataCollection.cpp.s
-.PHONY : dataCollection.cpp.s
+lib/udp_tx.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/dataCollection.dir/build.make CMakeFiles/dataCollection.dir/lib/udp_tx.cpp.s
+.PHONY : lib/udp_tx.cpp.s
 
-udp_tx.o: udp_tx.cpp.o
-.PHONY : udp_tx.o
+src/dataCollection.o: src/dataCollection.cpp.o
+.PHONY : src/dataCollection.o
 
 # target to build an object file
-udp_tx.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/udp_lib.dir/build.make CMakeFiles/udp_lib.dir/udp_tx.cpp.o
-.PHONY : udp_tx.cpp.o
+src/dataCollection.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/dataCollection.dir/build.make CMakeFiles/dataCollection.dir/src/dataCollection.cpp.o
+.PHONY : src/dataCollection.cpp.o
 
-udp_tx.i: udp_tx.cpp.i
-.PHONY : udp_tx.i
+src/dataCollection.i: src/dataCollection.cpp.i
+.PHONY : src/dataCollection.i
 
 # target to preprocess a source file
-udp_tx.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/udp_lib.dir/build.make CMakeFiles/udp_lib.dir/udp_tx.cpp.i
-.PHONY : udp_tx.cpp.i
+src/dataCollection.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/dataCollection.dir/build.make CMakeFiles/dataCollection.dir/src/dataCollection.cpp.i
+.PHONY : src/dataCollection.cpp.i
 
-udp_tx.s: udp_tx.cpp.s
-.PHONY : udp_tx.s
+src/dataCollection.s: src/dataCollection.cpp.s
+.PHONY : src/dataCollection.s
 
 # target to generate assembly for a file
-udp_tx.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/udp_lib.dir/build.make CMakeFiles/udp_lib.dir/udp_tx.cpp.s
-.PHONY : udp_tx.cpp.s
+src/dataCollection.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/dataCollection.dir/build.make CMakeFiles/dataCollection.dir/src/dataCollection.cpp.s
+.PHONY : src/dataCollection.cpp.s
 
 # Help Target
 help:
@@ -199,13 +186,12 @@ help:
 	@echo "... edit_cache"
 	@echo "... rebuild_cache"
 	@echo "... dataCollection"
-	@echo "... udp_lib"
-	@echo "... dataCollection.o"
-	@echo "... dataCollection.i"
-	@echo "... dataCollection.s"
-	@echo "... udp_tx.o"
-	@echo "... udp_tx.i"
-	@echo "... udp_tx.s"
+	@echo "... lib/udp_tx.o"
+	@echo "... lib/udp_tx.i"
+	@echo "... lib/udp_tx.s"
+	@echo "... src/dataCollection.o"
+	@echo "... src/dataCollection.i"
+	@echo "... src/dataCollection.s"
 .PHONY : help
 
 

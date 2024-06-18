@@ -69,28 +69,28 @@ include CMakeFiles/udp_lib.dir/progress.make
 # Include the compile flags for this target's objects.
 include CMakeFiles/udp_lib.dir/flags.make
 
-CMakeFiles/udp_lib.dir/udp_tx.cpp.o: CMakeFiles/udp_lib.dir/flags.make
-CMakeFiles/udp_lib.dir/udp_tx.cpp.o: /Users/noahdrakes/Documents/research/dvrkDataCollection/udp_tx.cpp
-CMakeFiles/udp_lib.dir/udp_tx.cpp.o: CMakeFiles/udp_lib.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/Users/noahdrakes/Documents/research/dvrkDataCollection/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_1) "Building CXX object CMakeFiles/udp_lib.dir/udp_tx.cpp.o"
-	/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/udp_lib.dir/udp_tx.cpp.o -MF CMakeFiles/udp_lib.dir/udp_tx.cpp.o.d -o CMakeFiles/udp_lib.dir/udp_tx.cpp.o -c /Users/noahdrakes/Documents/research/dvrkDataCollection/udp_tx.cpp
+CMakeFiles/udp_lib.dir/src/udp_tx.cpp.o: CMakeFiles/udp_lib.dir/flags.make
+CMakeFiles/udp_lib.dir/src/udp_tx.cpp.o: /Users/noahdrakes/Documents/research/dvrkDataCollection/src/udp_tx.cpp
+CMakeFiles/udp_lib.dir/src/udp_tx.cpp.o: CMakeFiles/udp_lib.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/Users/noahdrakes/Documents/research/dvrkDataCollection/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_1) "Building CXX object CMakeFiles/udp_lib.dir/src/udp_tx.cpp.o"
+	/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/udp_lib.dir/src/udp_tx.cpp.o -MF CMakeFiles/udp_lib.dir/src/udp_tx.cpp.o.d -o CMakeFiles/udp_lib.dir/src/udp_tx.cpp.o -c /Users/noahdrakes/Documents/research/dvrkDataCollection/src/udp_tx.cpp
 
-CMakeFiles/udp_lib.dir/udp_tx.cpp.i: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing CXX source to CMakeFiles/udp_lib.dir/udp_tx.cpp.i"
-	/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/noahdrakes/Documents/research/dvrkDataCollection/udp_tx.cpp > CMakeFiles/udp_lib.dir/udp_tx.cpp.i
+CMakeFiles/udp_lib.dir/src/udp_tx.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing CXX source to CMakeFiles/udp_lib.dir/src/udp_tx.cpp.i"
+	/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/noahdrakes/Documents/research/dvrkDataCollection/src/udp_tx.cpp > CMakeFiles/udp_lib.dir/src/udp_tx.cpp.i
 
-CMakeFiles/udp_lib.dir/udp_tx.cpp.s: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/udp_lib.dir/udp_tx.cpp.s"
-	/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/noahdrakes/Documents/research/dvrkDataCollection/udp_tx.cpp -o CMakeFiles/udp_lib.dir/udp_tx.cpp.s
+CMakeFiles/udp_lib.dir/src/udp_tx.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/udp_lib.dir/src/udp_tx.cpp.s"
+	/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/noahdrakes/Documents/research/dvrkDataCollection/src/udp_tx.cpp -o CMakeFiles/udp_lib.dir/src/udp_tx.cpp.s
 
 # Object files for target udp_lib
 udp_lib_OBJECTS = \
-"CMakeFiles/udp_lib.dir/udp_tx.cpp.o"
+"CMakeFiles/udp_lib.dir/src/udp_tx.cpp.o"
 
 # External object files for target udp_lib
 udp_lib_EXTERNAL_OBJECTS =
 
-libudp_lib.a: CMakeFiles/udp_lib.dir/udp_tx.cpp.o
+libudp_lib.a: CMakeFiles/udp_lib.dir/src/udp_tx.cpp.o
 libudp_lib.a: CMakeFiles/udp_lib.dir/build.make
 libudp_lib.a: CMakeFiles/udp_lib.dir/link.txt
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --bold --progress-dir=/Users/noahdrakes/Documents/research/dvrkDataCollection/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Linking CXX static library libudp_lib.a"
