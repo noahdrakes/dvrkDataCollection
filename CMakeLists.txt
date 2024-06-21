@@ -15,6 +15,7 @@ include_directories(${CMAKE_SOURCE_DIR}/lib)
 set(SOURCES
     src/dataCollection.cpp
     lib/udp_tx.cpp
+    lib/data_collection.cpp
 )
 
 # Add the executable
