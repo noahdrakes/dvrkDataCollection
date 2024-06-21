@@ -18,23 +18,15 @@
 
 using namespace std;
 
-// NOTE:
-// HOST_IP_ADDRESS = "169.254.255.252"
-// PS IP ADDRESS    (ETH1) = "169.254.10.0"  
+///////////////////////
+// PROTECTED METHODS //
+///////////////////////
 
-// needs to be running continuously 
-// could program to start on key press 
-// could be in one big while loop -> NEED TO BE NON-BLOCKING 
-
-// could use relative time 
-    // call getitme function on start 
-    // for each packet record relative to start
-
-DataCollection::DataCollection(){
-    cout << "New Data Collection Object !" << endl;
-    isDataCollectionRunning = false;
-    stop_data_collection_flag = false;
+static float calculate_duration_as_float(chrono::high_resolution_clock::time_point start, chrono::high_resolution_clock::time_point end ){
+    std::chrono::duration<float> duration = end - start;
+    return duration.count();
 }
+
 
 void DataCollection::load_meta_data(uint32_t *meta_data){
     // store meta data into meta data struct
@@ -67,11 +59,137 @@ void DataCollection::load_meta_data(uint32_t *meta_data){
     dc_meta.samples_per_packet = meta_data[6];
 }
 
+bool DataCollection :: collect_data(){
+
+    printf("enter collect data\n");
+
+    if (isDataCollectionRunning){
+        collect_data_ret = false;
+        return false;
+    }
+
+    isDataCollectionRunning = true;
+
+    char startDataCollectionCMD[] = "HOST: START DATA COLLECTION";
+
+    while(sm_state != SM_EXIT){
+
+        switch(sm_state){
+            case SM_SEND_START_DATA_COLLECTIION_CMD_TO_PS:{
+                udp_transmit(sock_id, startDataCollectionCMD, 28);
+                sm_state = SM_START_DATA_COLLECTION;
+                break;
+            }
+
+            case SM_START_DATA_COLLECTION:{
+                time.start = std::chrono::high_resolution_clock::now();
+                float time_elapsed = 0; 
+                int count = 0;
+
+                char endDataCollectionCmd[] = "CLIENT: STOP_DATA_COLLECTION";
+                uint32_t temp = 0;
+
+                ofstream myFile;
+                myFile.open("data.csv");
+            
+                while(!stop_data_collection_flag){
+
+                    int ret_code = udp_nonblocking_receive(sock_id, data_buffer, dc_meta.data_buffer_size);
+
+                    if (ret_code == UDP_DATA_IS_AVAILBLE){
+                        
+                        // might need to use timestamp to verify that this is truly new data
+                        // index 0 is always the time stamp
+                        // so im confirming that the timestamp from this packet and the previous 
+                        // packet are not the same
+                        if (temp != data_buffer[0]){
+
+                            count = 0;
+                            for (int i = 0; i < dc_meta.data_buffer_size / 4 ; i+= dc_meta.size_of_sample){
+                                
+                                for (int j = i; j < i + dc_meta.size_of_sample; j++){
+                                    myFile << data_buffer[j];
+
+                                    if (j != (i + dc_meta.size_of_sample - 1)){
+                                        myFile << ",";
+                                    }
+                                }
+                                myFile << "\n";
+
+                            }
+                        }                        
+                    // check for udp errors
+                    } else if (ret_code != UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT){
+                        collect_data_ret = false;
+                        return false;
+                    }
+                    
+                    temp = data_buffer[0]; 
+                }
+
+                myFile.close();
+
+                cout << "here" << endl;
+
+                time.end = std::chrono::high_resolution_clock::now();
+                time.elapsed = calculate_duration_as_float(time.start, time.end);
+
+
+                cout << "DATA COLLECTION COMPLETE! Time Elapsed: " << time.elapsed << "s" << endl;
+                cout << "data stored to data.csv" << endl;
+
+                collect_data_ret = true;
+                sm_state = SM_CLOSE_SOCKET;
+                break;
+            }
+
+            case SM_CLOSE_SOCKET:{
+
+                if (!collect_data_ret){
+                    cout << "[UDP_ERROR] - return code:  | Make sure that server application is executing on the processor! The udp connection may closed." << endl;
+                    close(sock_id);
+                    return collect_data_ret;
+                }
+
+                cout << "closing socket" << endl;
+                close(sock_id);
+                sm_state = SM_EXIT;
+                break;
+            }
+        }
+    }
+
+    cout << "do we return true" << endl;
+
+    return true;
+}
+
+void * DataCollection::collect_data_thread(void * args){
+    DataCollection *dc = static_cast<DataCollection *>(args);
+
+    cout << "after casting void pointer to data collection object" << endl;
+    dc->collect_data();
+    return nullptr;
+}
+
+////////////////////
+// PUBLIC METHODS //
+////////////////////
+
+
+DataCollection::DataCollection(){
+    cout << "New Data Collection Object !" << endl;
+    isDataCollectionRunning = false;
+    stop_data_collection_flag = false;
+}
+
 // TODO: need to add useful return statements -> all the close socket cases are just returns
 // make sure logic checks out 
 bool DataCollection :: init(uint8_t boardID){    
 
-    udp_init(&sock_id, boardID);
+    if(!udp_init(&sock_id, boardID)){
+        return false;
+    }
  
     sm_state = SM_SEND_READY_STATE_TO_PS;
     int ret_code = 0;
@@ -162,125 +280,6 @@ bool DataCollection :: init(uint8_t boardID){
     }
 }
 
-static float calculate_duration_as_float(chrono::high_resolution_clock::time_point start, chrono::high_resolution_clock::time_point end ){
-    std::chrono::duration<float> duration = end - start;
-    return duration.count();
-}
-
-
-bool DataCollection :: collect_data(){
-
-    printf("enter collect data\n");
-
-    if (isDataCollectionRunning){
-        collect_data_ret = false;
-        return false;
-    }
-
-    isDataCollectionRunning = true;
-
-    char startDataCollectionCMD[] = "HOST: START DATA COLLECTION";
-
-    while(sm_state != SM_EXIT){
-
-        switch(sm_state){
-            case SM_SEND_START_DATA_COLLECTIION_CMD_TO_PS:{
-                udp_transmit(sock_id, startDataCollectionCMD, 28);
-                sm_state = SM_START_DATA_COLLECTION;
-                break;
-            }
-
-            case SM_START_DATA_COLLECTION:{
-                time.start = std::chrono::high_resolution_clock::now();
-                float time_elapsed = 0; 
-                int count = 0;
-
-                char endDataCollectionCmd[] = "CLIENT: STOP_DATA_COLLECTION";
-                uint32_t temp = 0;
-
-                ofstream myFile;
-                myFile.open("data.csv");
-                
-
-                while(!stop_data_collection_flag){
-
-                    int ret_code = udp_nonblocking_receive(sock_id, data_buffer, dc_meta.data_buffer_size);
-
-                    if (ret_code == UDP_DATA_IS_AVAILBLE){
-                        
-                        // might need to use timestamp to verify that this is truly new data
-                        // index 0 is always the time stamp
-                        // so im confirming that the timestamp from this packet and the previous 
-                        // packet are not the same
-                        if (temp != data_buffer[0]){
-
-                            count = 0;
-                            for (int i = 0; i < dc_meta.data_buffer_size / 4 ; i+= dc_meta.size_of_sample){
-                                
-                                for (int j = i; j < i + dc_meta.size_of_sample; j++){
-                                    myFile << data_buffer[j];
-
-                                    if (j != (i + dc_meta.size_of_sample - 1)){
-                                        myFile << ",";
-                                    }
-                                }
-                                myFile << "\n";
-
-                            }
-                        }                        
-                    // check for udp errors
-                    } else if (ret_code != UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT){
-                        collect_data_ret = false;
-                        return false;
-                    }
-                    
-                    temp = data_buffer[0]; 
-                }
-
-                myFile.close();
-
-                cout << "here" << endl;
-
-                time.end = std::chrono::high_resolution_clock::now();
-                time.elapsed = calculate_duration_as_float(time.start, time.end);
-
-
-                cout << "DATA COLLECTION COMPLETE! Time Elapsed: " << time.elapsed << "s" << endl;
-                cout << "data stored to data.csv" << endl;
-
-                collect_data_ret = true;
-                sm_state = SM_CLOSE_SOCKET;
-                break;
-            }
-
-            case SM_CLOSE_SOCKET:{
-
-                if (!collect_data_ret){
-                    cout << "[UDP_ERROR] - return code:  | Make sure that server application is executing on the processor! The udp connection may closed." << endl;
-                    close(sock_id);
-                    return collect_data_ret;
-                }
-
-                cout << "closing socket" << endl;
-                close(sock_id);
-                sm_state = SM_EXIT;
-                break;
-            }
-        }
-    }
-
-    cout << "do we return true" << endl;
-
-    return true;
-}
-
-void * DataCollection::collect_data_thread(void * args){
-    DataCollection *dc = static_cast<DataCollection *>(args);
-
-    cout << "after casting void pointer to data collection object" << endl;
-    dc->collect_data();
-    return nullptr;
-}
 
 // TODO: need to call collect_data() in this start() function 
     // needs to be called as a seperate thread and detached 
@@ -292,7 +291,7 @@ bool DataCollection :: start(){
         return 1;
     }
 
-    return 0;
+    return true;
 }
 
 bool DataCollection :: stop(){

@@ -15,10 +15,11 @@
 #include <fstream>
 #include <string>
 #include "data_collection.hpp"
+#include <termios.h>
+#include <fcntl.h>
+#include <cstdio>
 
 using namespace std;
-
-
 
 static bool isInteger(const char* str) {
     // Check if the string is empty
@@ -31,19 +32,38 @@ static bool isInteger(const char* str) {
 }
 
 static bool isExitKeyPressed(){
-    fd_set readfds;
-    FD_ZERO(&readfds);
-    FD_SET(STDIN_FILENO, &readfds); // Monitor stdin for input
+    struct termios oldt, newt;
+    int ch;
+    int oldf;
 
-    char buf[256];  
-    // check if the file descriptor for stdin input has data
-    if (FD_ISSET(STDIN_FILENO, &readfds)) {
-        fgets(buf, sizeof(buf), stdin); // Read input from stdin
-        if (buf[0] == 'e') {
+    // Get the terminal settings for stdin
+    tcgetattr(STDIN_FILENO, &oldt);
+    newt = oldt;
+
+    // Disable canonical mode and echoing
+    newt.c_lflag &= ~(ICANON | ECHO);
+
+    // Set the new terminal settings for stdin
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+    oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
+
+    // Set stdin to non-blocking mode
+    fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
+
+    ch = getchar();
+
+    // Restore the old terminal settings
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+    fcntl(STDIN_FILENO, F_SETFL, oldf);
+
+    if (ch != EOF) {
+        if (ch == 'e') {
             printf("Exit key pressed, stopping the program.\n");
             return true;
         }
+        ungetc(ch, stdin); // Put the character back if it's not 'e'
     }
+
     return false;
 }
 
@@ -62,17 +82,18 @@ int main(int argc, char *argv[]) {
     if (argc == 3){
 
         if (!isInteger(argv[1])){
-            cout << "invalid dataCollectionDuration arg" << endl;
-            return -1;
-        }
-
-        if (!isInteger(argv[2])){
             cout << "invalid boardID arg" << endl;
             return -1;
         }
 
-        dataCollectionDuration = atoi(argv[1]);
-        boardID = atoi(argv[2]);
+
+        if (!isInteger(argv[2])){
+            cout << "invalid dataCollectionDuration arg" << endl;
+            return -1;
+        }
+
+        dataCollectionDuration = atoi(argv[2]);
+        boardID = atoi(argv[1]);
         timedCaptureFlag = true;
     
     // start boardID
@@ -87,8 +108,9 @@ int main(int argc, char *argv[]) {
     
     } else if (argc == 1) {
 
-        cout << "Ethernet Client Program:" << endl;
-        cout << "./ethernet_client <captureTime> <boardID>" << endl;
+        cout << "Ethernet Client Program!" << endl;
+        cout << "------------------------------" << endl;
+        cout << "Usage: ./ethernet_client <boardID> [captureTime] " << endl;
         cout << "where <captureTime> is an optional arg!" << endl;
         cout << "[NOTE] Make sure to start the server before you start the client" << endl;;
         return 0;
@@ -100,20 +122,37 @@ int main(int argc, char *argv[]) {
     }
 
     int client_socket;
-
-    // udp_init(&client_socket, boardID);
+    bool ret;
 
     DataCollection *DC = new DataCollection();
 
-    DC->init(boardID);
+    ret = DC->init(boardID);
 
-    DC->start();
+    if (!ret){
+        return -1;
+    }
 
-    sleep(3);
+    ret = DC->start();
 
-    DC->stop();
+    if (!ret){
+        return -1;
+    }
 
-    // DataCollectionStateMachine(client_socket, readfds);
+    if (timedCaptureFlag){
+        sleep(dataCollectionDuration);
+    } else {
+        while(1){
+            if (isExitKeyPressed()){
+                break;
+            }
+        }
+    }
+    
+    ret = DC->stop();
+
+    if (!ret){
+        return -1;
+    }
 
     return 0;
 }
