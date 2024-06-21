@@ -30,9 +30,12 @@ bool udp_init(int * client_socket, uint8_t boardId){
     
     // **change sprint statemnt to use %s , no need for conditionals
 
+    
     snprintf(ipAddress + strlen(ipAddress) , sizeof(ipAddress) - strlen(ipAddress), "%d", boardId);
 
+
     *client_socket = socket(AF_INET, SOCK_DGRAM, 0);
+
 
     if (*client_socket < 0) {
         return false;

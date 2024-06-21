@@ -24,11 +24,7 @@ const char *dataCollectionCMD;
 std::chrono::time_point<std::chrono::high_resolution_clock> start_time;
 std::chrono::time_point<std::chrono::high_resolution_clock> end_time;
 
-struct DC_Time{
-    std::chrono::time_point<std::chrono::high_resolution_clock> start_time;
-    std::chrono::time_point<std::chrono::high_resolution_clock> end_time;
-    float time_elapsed;
-}dc_time;
+
 
 // NOTE:
 // HOST_IP_ADDRESS = "169.254.255.252"
@@ -42,24 +38,298 @@ struct DC_Time{
     // call getitme function on start 
     // for each packet record relative to start
 
-enum DataCollectionStateMachine {
-    SM_READY = 0,
-    SM_SEND_READY_STATE_TO_PS,
-    SM_WAIT_FOR_PS_HANDSHAKE,
-    SM_SEND_START_DATA_COLLECTIION_CMD_TO_PS,
-    SM_START_DATA_COLLECTION,
-    SM_RECV_DATA_COLLECTION_META_DATA,
-    SM_SEND_METADATA_RECV,
-    SM_CLOSE_SOCKET,
-    SM_EXIT
-};
 
 
-
-DataCollection :: DataCollection(){
-    cout << "constructor" << endl;
+DataCollection::DataCollection(){
+    cout << "New Data Collection Object !" << endl;
+    isDataCollectionRunning = false;
+    stop_data_collection_flag = false;
 }
 
+void DataCollection::load_meta_data(uint32_t *meta_data){
+    // store meta data into meta data struct
+    string hwVersString;
+
+    switch(meta_data[1]){
+
+        case 0x514C4131:{
+            hwVersString = "QLA1";
+            break;
+        case 0x64524131:
+            hwVersString = "dRA1";
+            break;
+        case 0x44514C41:
+            hwVersString = "dQLA";
+            break;
+        default:
+            cout << "error" << endl;
+            hwVersString = "ERROR";
+            break;
+
+        }
+    };
+
+    dc_meta.HWVers = hwVersString;
+    dc_meta.num_encoders = (uint8_t) meta_data[2];
+    dc_meta.num_motors = (uint8_t) meta_data[3];
+    dc_meta.data_buffer_size = meta_data[4];
+    dc_meta.size_of_sample = meta_data[5];
+    dc_meta.samples_per_packet = meta_data[6];
+}
+
+// TODO: need to add useful return statements -> all the close socket cases are just returns
+// make sure logic checks out 
+bool DataCollection :: init(uint8_t boardID){    
+
+    udp_init(&sock_id, boardID);
+ 
+    sm_state = SM_SEND_READY_STATE_TO_PS;
+    int ret_code = 0;
+
+    char sendReadyStateCMD[] = "HOST: READY FOR DATA COLLECTION";
+    char sendMetaDataRecvd[] = "HOST: RECEIVED METADATA";
+    
+    char recvBuffer[100] = {0}; 
+    uint32_t meta_data[7] = {0};
+    bool error_flag = false;
+    
+    // Handshaking PS
+    while(1){
+        switch(sm_state){
+            case SM_SEND_READY_STATE_TO_PS:{
+                udp_transmit(sock_id, sendReadyStateCMD , strlen(sendReadyStateCMD));
+                sm_state = SM_RECV_DATA_COLLECTION_META_DATA;
+                break;
+            }
+
+            case SM_RECV_DATA_COLLECTION_META_DATA:{
+                ret_code = udp_nonblocking_receive(sock_id, meta_data, sizeof(meta_data));
+                if (ret_code == UDP_DATA_IS_AVAILBLE){
+                    if (meta_data[0] == METADATA_MAGIC_NUMBER){
+                        cout << "Received Message from Zynq: RECEIVED METADATA" << endl;
+
+                        load_meta_data(meta_data);
+
+                        cout << "- DATA COLLECTION METADATA -" << endl;
+                        cout << "Hardware Version: " << dc_meta.HWVers << endl;
+                        cout << "Num of Encoders:  " <<  +dc_meta.num_encoders << endl;
+                        cout << "Num of Motors: " << +dc_meta.num_motors << endl;
+                        cout << "DataBuffer Size: " << dc_meta.data_buffer_size << endl;
+                        cout << "Samples per Packet: " << dc_meta.samples_per_packet << endl;
+                        cout << "Sizoef Samples (in bytes): " << dc_meta.size_of_sample << endl;
+                        
+                        sm_state = SM_SEND_METADATA_RECV;
+                        break;
+                    } else {
+                        cout << "[ERROR] Host data collection is out of sync with Processor State Machine. Restart Server";
+                        sm_state = SM_CLOSE_SOCKET;
+                        break;
+                    }
+                } else if (ret_code == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT){
+                    sm_state = SM_SEND_READY_STATE_TO_PS;
+                    break;
+                } else {
+                    // sm_state = SM_CLOSE_SOCKET;
+                    cout << "[ERROR] - UDP fail, check connection with processor" << endl;
+                    sm_state = SM_CLOSE_SOCKET;
+                    break;
+                }
+            }
+
+            case SM_SEND_METADATA_RECV:{
+                udp_transmit(sock_id, sendMetaDataRecvd, sizeof(sendMetaDataRecvd));
+                sm_state = SM_WAIT_FOR_PS_HANDSHAKE;
+                break;
+            }
+
+            case SM_WAIT_FOR_PS_HANDSHAKE:{
+                ret_code = udp_nonblocking_receive(sock_id, recvBuffer, sizeof(recvBuffer));
+                if (ret_code == UDP_DATA_IS_AVAILBLE){
+                    if (strcmp(recvBuffer, "ZYNQ: READY FOR DATA COLLECTION") == 0){
+                        cout << "Received Message from Zynq: READY FOR DATA COLLECTION" << endl;
+                        sm_state = SM_SEND_START_DATA_COLLECTIION_CMD_TO_PS;
+                        return true; 
+                    } else {
+                        cout << "[ERROR] Host data collection is out of sync with Processor State Machine. Restart Server";
+                        sm_state = SM_CLOSE_SOCKET;
+                        break;
+                    }
+                } else if (ret_code == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT){
+                    sm_state = SM_SEND_METADATA_RECV;
+                    break;
+                } else {
+                    cout << "[ERROR] - UDP fail, check connection with processor" << endl;
+                    sm_state = SM_CLOSE_SOCKET;
+                    break;
+                }
+            } 
+
+            case SM_CLOSE_SOCKET:{
+                close(sock_id);
+                return false;
+            }
+        }
+    }
+}
+
+static float calculate_duration_as_float(chrono::high_resolution_clock::time_point start, chrono::high_resolution_clock::time_point end ){
+    std::chrono::duration<float> duration = end - start;
+    return duration.count();
+}
+
+
+bool DataCollection :: collect_data(){
+
+    printf("enter collect data\n");
+
+    if (isDataCollectionRunning){
+        collect_data_ret = false;
+        return false;
+    }
+
+    isDataCollectionRunning = true;
+
+    char startDataCollectionCMD[] = "HOST: START DATA COLLECTION";
+
+    while(sm_state != SM_EXIT){
+
+        switch(sm_state){
+            case SM_SEND_START_DATA_COLLECTIION_CMD_TO_PS:{
+                udp_transmit(sock_id, startDataCollectionCMD, 28);
+                sm_state = SM_START_DATA_COLLECTION;
+                break;
+            }
+
+            case SM_START_DATA_COLLECTION:{
+                time.start = std::chrono::high_resolution_clock::now();
+                float time_elapsed = 0; 
+                int count = 0;
+
+                char endDataCollectionCmd[] = "CLIENT: STOP_DATA_COLLECTION";
+                uint32_t temp = 0;
+
+                ofstream myFile;
+                myFile.open("data.csv");
+                
+
+                while(!stop_data_collection_flag){
+
+                    int ret_code = udp_nonblocking_receive(sock_id, data_buffer, dc_meta.data_buffer_size);
+
+                    if (ret_code == UDP_DATA_IS_AVAILBLE){
+                        
+                        // might need to use timestamp to verify that this is truly new data
+                        // index 0 is always the time stamp
+                        // so im confirming that the timestamp from this packet and the previous 
+                        // packet are not the same
+                        if (temp != data_buffer[0]){
+
+                            count = 0;
+                            for (int i = 0; i < dc_meta.data_buffer_size / 4 ; i+= dc_meta.size_of_sample){
+                                
+                                for (int j = i; j < i + dc_meta.size_of_sample; j++){
+                                    myFile << data_buffer[j];
+
+                                    if (j != (i + dc_meta.size_of_sample - 1)){
+                                        myFile << ",";
+                                    }
+                                }
+                                myFile << "\n";
+
+                            }
+                        }                        
+                    // check for udp errors
+                    } else if (ret_code != UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT){
+                        collect_data_ret = false;
+                        return false;
+                    }
+                    
+                    temp = data_buffer[0]; 
+                }
+
+                myFile.close();
+
+                cout << "here" << endl;
+
+                time.end = std::chrono::high_resolution_clock::now();
+                time.elapsed = calculate_duration_as_float(time.start, time.end);
+
+
+                cout << "DATA COLLECTION COMPLETE! Time Elapsed: " << time.elapsed << "s" << endl;
+                cout << "data stored to data.csv" << endl;
+
+                collect_data_ret = true;
+                sm_state = SM_CLOSE_SOCKET;
+                break;
+            }
+
+            case SM_CLOSE_SOCKET:{
+
+                if (!collect_data_ret){
+                    cout << "[UDP_ERROR] - return code:  | Make sure that server application is executing on the processor! The udp connection may closed." << endl;
+                    close(sock_id);
+                    return collect_data_ret;
+                }
+
+                cout << "closing socket" << endl;
+                close(sock_id);
+                sm_state = SM_EXIT;
+                break;
+            }
+        }
+    }
+
+    cout << "do we return true" << endl;
+
+    return true;
+}
+
+void * DataCollection::collect_data_thread(void * args){
+    DataCollection *dc = static_cast<DataCollection *>(args);
+
+    cout << "after casting void pointer to data collection object" << endl;
+    dc->collect_data();
+    return nullptr;
+}
+
+// TODO: need to call collect_data() in this start() function 
+    // needs to be called as a seperate thread and detached 
+    // then stop just sets the stop_data_collection flag to true
+bool DataCollection :: start(){
+
+    if (pthread_create(&collect_data_t, nullptr, DataCollection::collect_data_thread, this) != 0) {
+        std::cerr << "Error collect data thread" << std::endl;
+        return 1;
+    }
+
+   
+
+    return 0;
+}
+
+bool DataCollection :: stop(){
+
+    char endDataCollectionCmd[] = "CLIENT: STOP_DATA_COLLECTION";
+
+    if (!isDataCollectionRunning){
+        cout << "[ERROR] Data Collection is not running" << endl;
+        return false;
+    }
+
+    isDataCollectionRunning = false;
+     
+    stop_data_collection_flag = true;
+
+    // send end data collection cmd
+    if( !udp_transmit(sock_id, endDataCollectionCmd, sizeof(endDataCollectionCmd)) ){
+        cout << "[ERROR]: UDP error. check connection with host!" << endl;
+    }
+
+    cout << "STOP DATA COLLECTION" << endl;
+
+    pthread_join(collect_data_t, nullptr);
+    return true;
+}
 
 static bool isInteger(const char* str) {
     // Check if the string is empty
@@ -69,10 +339,6 @@ static bool isInteger(const char* str) {
 
     // Check if all characters in the string are digits
     return std::all_of(str, str + strlen(str), ::isdigit);
-}
-
-std::string uint32ToString(uint32_t value) {
-    return std::to_string(value);
 }
 
 static bool isExitKeyPressed(){
@@ -91,199 +357,6 @@ static bool isExitKeyPressed(){
     }
     return false;
 }
-
-static float calculate_duration_as_float(chrono::high_resolution_clock::time_point start, chrono::high_resolution_clock::time_point end ){
-    std::chrono::duration<float> duration = end - start;
-    return duration.count();
-}
-
-static void load_meta_data(uint32_t *meta_data){
-    // store meta data into meta data struct
-    string hwVersString;
-
-    switch(meta_data[1]){
-        case 0x514C4131:{
-            hwVersString = "QLA1";
-        case 0x64524131:
-            hwVersString = "dRA1";
-        case 0x44514C41:
-            hwVersString = "dQLA";
-        }
-    };
-
-    dc_meta.HWVers = hwVersString;
-    dc_meta.num_encoders = (uint8_t) meta_data[2];
-    dc_meta.num_motors = (uint8_t) meta_data[3];
-    dc_meta.data_buffer_size = meta_data[4];
-    dc_meta.size_of_sample = meta_data[5];
-    dc_meta.samples_per_packet = meta_data[6];
-}
-
-// TODO: figure out valid return code for state machine success and failure
-// configure client as a library (start_colllect, stop_collect, init_collect) class
-static int DataCollectionStateMachine(int client_socket, fd_set readfds){
-    int state = SM_SEND_READY_STATE_TO_PS;
-    int ret_code = 0;
-
-    char sendReadyStateCMD[] = "HOST: READY FOR DATA COLLECTION";
-    char startDataCollectionCMD[] = "HOST: START DATA COLLECTION";
-    char sendMetaDataRecvd[] = "HOST: RECEIVED METADATA";
-    char recvBuffer[100] = {0}; 
-    uint32_t meta_data[7] = {0};
-
-    while(state != SM_EXIT){
-        switch(state){
-            case SM_SEND_READY_STATE_TO_PS:{
-                udp_transmit(client_socket, sendReadyStateCMD , strlen(sendReadyStateCMD));
-                state = SM_RECV_DATA_COLLECTION_META_DATA;
-                break;
-            }
-
-            // new pair 
-            case SM_RECV_DATA_COLLECTION_META_DATA:{
-                // recv meta data
-                ret_code = udp_nonblocking_receive(client_socket, meta_data, sizeof(meta_data));
-                if (ret_code == UDP_DATA_IS_AVAILBLE){
-                    if (meta_data[0] == METADATA_MAGIC_NUMBER){
-                        cout << "Received Message from Zynq: RECEIVED METADATA" << endl;
-
-                        load_meta_data(meta_data);
-
-                        cout << "-DATA COLLECTION METADATA -" << endl;
-                        cout << "Hardware Version: " << dc_meta.HWVers << endl;
-                        cout << "Num of Encoders:  " <<  +dc_meta.num_encoders << endl;
-                        cout << "Num of Motors: " << +dc_meta.num_motors << endl;
-                        cout << "DataBuffer Size: " << dc_meta.data_buffer_size << endl;
-                        cout << "Samples per Packet: " << dc_meta.samples_per_packet << endl;
-                        cout << "Sizoef Samples (in bytes): " << dc_meta.size_of_sample << endl;
-                        
-                        state = SM_SEND_METADATA_RECV;
-                        break;
-                    } else {
-                        state = SM_SEND_READY_STATE_TO_PS;
-                        break;
-                    }
-                } else if (ret_code == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT){
-                    state = SM_SEND_READY_STATE_TO_PS;
-                    break;
-                } else {
-                    state = SM_CLOSE_SOCKET;
-                    break;
-                }
-            }
-
-            case SM_SEND_METADATA_RECV:{
-                // transmit meta data recieved
-                udp_transmit(client_socket, sendMetaDataRecvd, sizeof(sendMetaDataRecvd));
-                state = SM_WAIT_FOR_PS_HANDSHAKE;
-                break;
-            }
-
-            case SM_WAIT_FOR_PS_HANDSHAKE:{
-                ret_code = udp_nonblocking_receive(client_socket, recvBuffer, sizeof(recvBuffer));
-                if (ret_code == UDP_DATA_IS_AVAILBLE){
-                    if (strcmp(recvBuffer, "ZYNQ: READY FOR DATA COLLECTION") == 0){
-                        cout << "Received Message from Zynq: READY FOR DATA COLLECTION" << endl;
-                        state = SM_SEND_START_DATA_COLLECTIION_CMD_TO_PS;
-                        break;
-                    } else {
-                        state = SM_SEND_METADATA_RECV;
-                        break;
-                    }
-                } else if (ret_code == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT){
-                    state = SM_SEND_METADATA_RECV;
-                    break;
-                } else {
-                    state = SM_CLOSE_SOCKET;
-                    break;
-                }
-            }
-            case SM_SEND_START_DATA_COLLECTIION_CMD_TO_PS:{
-                cout << "Press [ENTER] to start data collection ..." << endl;
-                getchar();
-                udp_transmit(client_socket, startDataCollectionCMD, 28);
-                state = SM_START_DATA_COLLECTION;
-                break;
-            }
-
-            case SM_START_DATA_COLLECTION:{
-                start_time = std::chrono::high_resolution_clock::now();
-                float time_elapsed = 0; 
-                int count = 0;
-
-                uint32_t data_buffer[350] = {0};
-                char endDataCollectionCmd[] = "CLIENT: STOP_DATA_COLLECTION";
-                uint32_t temp = 0;
-
-                // ofstream myFile;
-                // myFile.open("data.csv");
-
-
-                while(time_elapsed < 3){
-
-                    ret_code = udp_nonblocking_receive(client_socket, data_buffer, sizeof(data_buffer));
-
-                    if (ret_code == UDP_DATA_IS_AVAILBLE){
-                        
-                        // might need to use timestamp to verify that this is truly new data
-                        // index 0 is always the time stamp
-                        // so im confirming that the timestamp from this packet and the previous 
-                        // packet are not the same
-                        if (temp != data_buffer[0]){
-                            // cout << "count: " << count++ << endl;
-                            // for (int i = 0; i < 1400; i++){
-                            //     printf("databuffer[%d] =  0x%X\n", i, data_buffer[i]);
-                            // }
-                        }
-
-                        // cout << "count: " << count++ << endl;
-
-                        // for (int i = 0; i < 350; i+=15){
-                        //     for (int j = i; j < i+15; j++){
-                        //         myFile << data_buffer[j] << ",";
-                        //     }
-
-                        //     myFile << "\n";
-                        // }
-
-                        
-                        
-                    }
-                    
-                    temp = data_buffer[0];
-                    end_time = std::chrono::high_resolution_clock::now();
-                    time_elapsed = calculate_duration_as_float(start_time, end_time);
-                }
-
-                // myFile.close();
-
-
-                if( !udp_transmit(client_socket, endDataCollectionCmd, sizeof(endDataCollectionCmd)) ){
-                    cout << "broo its falso bro" << endl;
-                }
-            
-                
-
-                state = SM_CLOSE_SOCKET;
-                break;
-            }
-
-            case SM_CLOSE_SOCKET:{
-
-                if (ret_code > 1){
-                    cout << "[UDP_ERROR] - return code: " << ret_code << " | Make sure that server application is executing on the processor! The udp connection may closed." << endl;;
-                }
-            
-                close(client_socket);
-                state = SM_EXIT;
-                break;
-            }
-        }
-    }
-
-    return ret_code;
-}
-
 
 
 using namespace std;
@@ -337,16 +410,21 @@ int main(int argc, char *argv[]) {
         return -1; 
     }
 
-    int  client_socket;
-    struct sockaddr_in server_address;
+    int client_socket;
 
-    fd_set readfds;
+    // udp_init(&client_socket, boardID);
 
-    udp_init(&client_socket, boardID);
+    DataCollection *DC = new DataCollection();
 
-    DataCollection *dc = new DataCollection();
+    DC->init(boardID);
 
-    DataCollectionStateMachine(client_socket, readfds);
+    DC->start();
+
+    sleep(3);
+
+    DC->stop();
+
+    // DataCollectionStateMachine(client_socket, readfds);
 
     return 0;
 }

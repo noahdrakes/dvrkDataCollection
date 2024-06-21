@@ -59,6 +59,9 @@ enum DataCollectionStateMachine {
     SM_START_DATA_COLLECTION,
     SM_CHECK_FOR_STOP_DATA_COLLECTION_CMD,
     SM_START_CONSUMER_THREAD,
+    SM_PACKAGE_DATA_COLLECTION_METADATA,
+    SM_SEND_DATA_COLLECTION_METADATA,
+    SM_WAIT_FOR_HOST_RECV_METADATA,
     SM_PRODUCE_DATA,
     SM_CONSUME_DATA,
     SM_CLOSE_SOCKET,
@@ -87,21 +90,20 @@ struct udp_info{
     int socket;
     struct sockaddr_in Addr;
     socklen_t AddrLen;
-} client; // this is global bc there will only be one
+} ; // this is global bc there will only be one
 
 
 struct DB{
     uint32_t double_buffer[2][UDP_MAX_PACKET_SIZE/4]; //note: changed from 1500 which makes sense
     uint8_t prod_buf;
     uint8_t cons_buf;
-    atomic_uint8_t busy;
+    atomic_uint8_t busy; // TODO: change name 
     uint16_t dataBufferSize; 
 
     // bad design since client doesnt belong in db struct
     // probably should make this object global
-    // udp_info *client;
+    udp_info *client;
 };
-
 
 
 // checks if data is available from udp buffer (for noblocking udp recv)
@@ -259,7 +261,8 @@ static bool load_data_buffer(BasePort *Port, AmpIO *Board, uint32_t *data_buffer
 
         // DATA 3: encoder position (for num_encoders)
         for (int i = 0; i < num_encoders; i++){
-            data_buffer[count++] = static_cast<uint32_t>(Board->GetEncoderPosition(i));
+            // is ths right ????? adding the encoderMidiRange
+            data_buffer[count++] = static_cast<uint32_t>(Board->GetEncoderPosition(i) + Board->GetEncoderMidRange());
 
             float encoder_velocity_float= static_cast<float>(Board->GetEncoderVelocityPredicted(i));
             data_buffer[count++] = *reinterpret_cast<uint32_t *>(&encoder_velocity_float);
@@ -275,14 +278,27 @@ static bool load_data_buffer(BasePort *Port, AmpIO *Board, uint32_t *data_buffer
     return true;
 }
 
-void init_db(DB *db, AmpIO *board){
+void package_meta_data(uint32_t *meta_data_buffer, DB *db, AmpIO *board){
+    uint8_t num_encoders = (uint8_t) board->GetNumEncoders();
+    uint8_t num_motors = (uint8_t) board->GetNumMotors();
+
+    meta_data_buffer[0] = 0xABCDEF12; // metadata magic word
+    meta_data_buffer[1] = board->GetHardwareVersion();
+    meta_data_buffer[2] = (uint32_t) num_encoders;
+    meta_data_buffer[3] = (uint32_t) num_motors;
+
+    meta_data_buffer[4] = (uint32_t) db->dataBufferSize; 
+    meta_data_buffer[5] = (uint32_t) calculate_sizeof_sample(num_encoders, num_motors);
+    meta_data_buffer[6] = (uint32_t) calculate_samples_per_packet(num_encoders, num_motors);
+}
+
+void init_db(DB *db, AmpIO *board, udp_info * client){
     db->cons_buf = 0;
     db->prod_buf = 0;
     db->busy = 0;
     db->dataBufferSize = calculate_quadlets_per_packet(board->GetNumEncoders(), board->GetNumMotors()) * 4;
+    db->client = client;
 }
-
-
 
 void * consume_data(void *arg){
     DB* db = (DB *) arg;
@@ -293,11 +309,14 @@ void * consume_data(void *arg){
             continue;
         }
 
-        db->busy = 0;
+        // need to fix order 
+       
 
-        udp_transmit(&client, db->double_buffer[db->cons_buf], db->dataBufferSize);
+        udp_transmit(db->client, db->double_buffer[db->cons_buf], db->dataBufferSize);
 
         db->cons_buf = (db->cons_buf + 1) % 2;
+
+        db->busy = 0;
     }
 
     return NULL;
@@ -309,6 +328,8 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
 
     int state = SM_WAIT_FOR_HOST_HANDSHAKE;
     char recvBuffer[100] = {0};
+
+    uint32_t data_collection_meta[7];
     
     // condition variable 
     int ret_code = 0;
@@ -321,7 +342,7 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
                 if (ret_code == UDP_DATA_IS_AVAILBLE){
                     if(strcmp(recvBuffer, "HOST: READY FOR DATA COLLECTION") == 0){
                         cout << "Received Message from Host: READY FOR DATA COLLECTION" << endl;
-                        state = SM_SEND_READY_STATE_TO_HOST;
+                        state = SM_SEND_DATA_COLLECTION_METADATA;
                         break;
                     } 
                 } else if (ret_code == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT){
@@ -333,7 +354,40 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
                 }
             }
 
-            // add more states for stop and start data collection
+            // new pair ////////////////
+
+            case SM_SEND_DATA_COLLECTION_METADATA:{
+                package_meta_data(data_collection_meta, db, board);
+
+                if(udp_transmit(client, data_collection_meta, sizeof(data_collection_meta)) < 1 ){
+                    perror("sendto failed");
+                    cout << "client addr is invalid." << endl;
+                    ret_code = SM_UDP_ERROR;
+                    state = SM_CLOSE_SOCKET;
+                    break;
+                }
+                state = SM_WAIT_FOR_HOST_RECV_METADATA;
+                break;
+            }
+
+            case SM_WAIT_FOR_HOST_RECV_METADATA:{
+                ret_code = udp_recvfrom_nonblocking(client, recvBuffer, 100);
+                if (ret_code == UDP_DATA_IS_AVAILBLE){
+                    if(strcmp(recvBuffer, "HOST: RECEIVED METADATA") == 0){
+                        cout << "Received Message from Host: METADATA RECEIVED" << endl;
+                        state = SM_SEND_READY_STATE_TO_HOST;
+                        break;
+                    } 
+                } else if (ret_code == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT){
+                    state = SM_SEND_DATA_COLLECTION_METADATA;
+                    break;
+                } else {
+                    ret_code = SM_UDP_ERROR;
+                    state = SM_CLOSE_SOCKET;
+                    break;
+                }
+            }
+
 
             case SM_SEND_READY_STATE_TO_HOST:{
                 char initiateDataCollection[] = "ZYNQ: READY FOR DATA COLLECTION";
@@ -374,12 +428,6 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
 
             case SM_START_DATA_COLLECTION:{
 
-                // SET DOUBLE BUFFER VARIABLES
-                db->cons_buf = 0;
-                db->prod_buf = 0;
-                db->busy = 0;
-                db->dataBufferSize = calculate_quadlets_per_packet(board->GetNumEncoders(), board->GetNumMotors()) * 4;
-
                 // set start time for data collection
                 start_time = std::chrono::high_resolution_clock::now();
                 state = SM_START_CONSUMER_THREAD;
@@ -410,6 +458,9 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
                 }
 
                 load_data_buffer(port, board, db->double_buffer[db->prod_buf]);
+
+                // need check for if producer overruns consumer 
+                // wait for consumer to finish
 
                 db->busy = 1;
 
@@ -494,7 +545,7 @@ int main(int argc, char *argv[]) {
 
     // create client object and set the addLen to the sizeof of the sockaddr_in struct
     // rename maybe udp_info
-    // udp_info client;
+    udp_info client;
     client.AddrLen = sizeof(client.Addr);
 
     // initiate socket connection to port 12345
@@ -506,7 +557,7 @@ int main(int argc, char *argv[]) {
     }
 
     DB db;
-    init_db(&db, Board);
+    init_db(&db, Board, &client);
 
 
     dataCollectionStateMachine(&client, Port, Board, &db);
