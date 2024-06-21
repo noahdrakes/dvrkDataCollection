@@ -15,9 +15,6 @@
 #include <fstream>
 #include <string>
 #include "data_collection.hpp"
-#include <termios.h>
-#include <fcntl.h>
-#include <cstdio>
 
 using namespace std;
 
@@ -32,40 +29,20 @@ static bool isInteger(const char* str) {
 }
 
 static bool isExitKeyPressed(){
-    struct termios oldt, newt;
-    int ch;
-    int oldf;
+    fd_set readfds;
+    FD_ZERO(&readfds);
+    FD_SET(STDIN_FILENO, &readfds); // Monitor stdin for input
 
-    // Get the terminal settings for stdin
-    tcgetattr(STDIN_FILENO, &oldt);
-    newt = oldt;
-
-    // Disable canonical mode and echoing
-    newt.c_lflag &= ~(ICANON | ECHO);
-
-    // Set the new terminal settings for stdin
-    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
-    oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
-
-    // Set stdin to non-blocking mode
-    fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
-
-    ch = getchar();
-
-    // Restore the old terminal settings
-    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-    fcntl(STDIN_FILENO, F_SETFL, oldf);
-
-    if (ch != EOF) {
-        if (ch == 'e') {
-            printf("Exit key pressed, stopping the program.\n");
-            return true;
-        }
-        ungetc(ch, stdin); // Put the character back if it's not 'e'
+    char buf[256];  
+    // check if the file descriptor for stdin input has data
+    if (FD_ISSET(STDIN_FILENO, &readfds)) {
+        fgets(buf, sizeof(buf), stdin); // Read input from stdin
+        return true;
     }
-
     return false;
 }
+
+
 
 
 using namespace std;
