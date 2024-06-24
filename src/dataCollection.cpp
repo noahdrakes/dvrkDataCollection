@@ -109,27 +109,35 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
-    ret = DC->start();
+    int count = 0;
+    while(count != 3){
+        ret = DC->start();
 
-    if (!ret){
-        return -1;
-    }
+        if (!ret){
+            return -1;
+        }
 
-    if (timedCaptureFlag){
-        sleep(dataCollectionDuration);
-    } else {
-        while(1){
-            if (isExitKeyPressed()){
-                break;
+        if (timedCaptureFlag){
+            sleep(dataCollectionDuration);
+        } else {
+            while(1){
+                if (isExitKeyPressed()){
+                    break;
+                }
             }
         }
+        
+        ret = DC->stop();
+
+        if (!ret){
+            return -1;
+        }
+
+        count++;
+
     }
     
     ret = DC->stop();
-
-    if (!ret){
-        return -1;
-    }
 
     return 0;
 }

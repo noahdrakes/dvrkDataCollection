@@ -69,13 +69,19 @@ bool DataCollection :: collect_data(){
     }
 
     isDataCollectionRunning = true;
+    
 
     char startDataCollectionCMD[] = "HOST: START DATA COLLECTION";
+
+    sm_state = SM_SEND_START_DATA_COLLECTIION_CMD_TO_PS;
+
+    std::cout << "finna start data collection" << endl;
 
     while(sm_state != SM_EXIT){
 
         switch(sm_state){
             case SM_SEND_START_DATA_COLLECTIION_CMD_TO_PS:{
+                std::cout << "sent start data collection command" << endl;
                 udp_transmit(sock_id, startDataCollectionCMD, 28);
                 sm_state = SM_START_DATA_COLLECTION;
                 break;
@@ -89,8 +95,13 @@ bool DataCollection :: collect_data(){
                 char endDataCollectionCmd[] = "CLIENT: STOP_DATA_COLLECTION";
                 uint32_t temp = 0;
 
+                std::cout << "stop data collection flag: " << stop_data_collection_flag << endl;
+
                 ofstream myFile;
                 myFile.open("data.csv");
+
+                stop_data_collection_flag = false;
+
             
                 while(!stop_data_collection_flag){
 
@@ -120,9 +131,13 @@ bool DataCollection :: collect_data(){
                         }                        
                     // check for udp errors
                     } else if (ret_code != UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT){
+                        cout << "no data brah" << endl;
                         collect_data_ret = false;
                         return false;
                     }
+
+                    // TODO: NEED TO ADD AN ERROR COUNTER TO TERMINATE CLIENT WHEN NO DATA IS AVAILABLE FOR LIKE
+                    // 1000 PASSES. 
                     
                     temp = data_buffer[0]; 
                 }
@@ -139,23 +154,24 @@ bool DataCollection :: collect_data(){
                 cout << "data stored to data.csv" << endl;
 
                 collect_data_ret = true;
-                sm_state = SM_CLOSE_SOCKET;
-                break;
-            }
-
-            case SM_CLOSE_SOCKET:{
-
-                if (!collect_data_ret){
-                    cout << "[UDP_ERROR] - return code:  | Make sure that server application is executing on the processor! The udp connection may closed." << endl;
-                    close(sock_id);
-                    return collect_data_ret;
-                }
-
-                cout << "closing socket" << endl;
-                close(sock_id);
+                // sm_state = SM_CLOSE_SOCKET;
                 sm_state = SM_EXIT;
                 break;
             }
+
+            // case SM_CLOSE_SOCKET:{
+
+            //     if (!collect_data_ret){
+            //         cout << "[UDP_ERROR] - return code:  | Make sure that server application is executing on the processor! The udp connection may closed." << endl;
+            //         close(sock_id);
+            //         return collect_data_ret;
+            //     }
+
+            //     cout << "closing socket" << endl;
+            //     close(sock_id);
+            //     sm_state = SM_EXIT;
+            //     break;
+            // }
         }
     }
 
@@ -298,10 +314,10 @@ bool DataCollection :: stop(){
 
     char endDataCollectionCmd[] = "CLIENT: STOP_DATA_COLLECTION";
 
-    if (!isDataCollectionRunning){
-        cout << "[ERROR] Data Collection is not running" << endl;
-        return false;
-    }
+    // if (!isDataCollectionRunning){
+    //     cout << "[ERROR] Data Collection is not running" << endl;
+    //     return false;
+    // }
 
     isDataCollectionRunning = false;
      
@@ -314,7 +330,13 @@ bool DataCollection :: stop(){
 
     cout << "STOP DATA COLLECTION" << endl;
 
+    
+
     pthread_join(collect_data_t, nullptr);
+
+    
+
+    // sleep(1);
     return true;
 }
 

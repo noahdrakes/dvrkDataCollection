@@ -302,7 +302,7 @@ void init_db(DB *db, AmpIO *board, udp_info * client){
 
 void * consume_data(void *arg){
     DB* db = (DB *) arg;
-    
+
     while(!stop_data_collection_flag){
         
         if (!db->busy){
@@ -333,6 +333,8 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
     
     // condition variable 
     int ret_code = 0;
+
+    pthread_t consumer_t;
 
     while(state != SM_EXIT){     
 
@@ -405,8 +407,10 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
 
             case SM_WAIT_FOR_HOST_START_CMD: {
                 memset(recvBuffer, 0, 100);
+                // cout << "host start cmd" << endl;
                 ret_code = udp_recvfrom_nonblocking(client, recvBuffer, 100);
                 if (ret_code == UDP_DATA_IS_AVAILBLE){
+                    cout << "recvd cmd " << recvBuffer << endl; 
                     if(strcmp(recvBuffer, "HOST: START DATA COLLECTION") == 0){
                         cout << "Received Message from Host: START DATA COLLECTION" << endl;
                         state = SM_START_DATA_COLLECTION;
@@ -436,14 +440,10 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
 
             case SM_START_CONSUMER_THREAD:{
 
-                pthread_t consumer_t;
-
                 if (pthread_create(&consumer_t, nullptr, consume_data, db) != 0) {
                     std::cerr << "Error creating consumer thread" << std::endl;
                     return 1;
                 }
-
-                pthread_detach(consumer_t);
 
                 state = SM_PRODUCE_DATA;
                 break;
@@ -477,9 +477,24 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
                 if (udp_recvfrom_nonblocking(client, recv_buffer, 29) == UDP_DATA_IS_AVAILBLE){
 
                     if(strcmp(recv_buffer, "CLIENT: STOP_DATA_COLLECTION") == 0){
+
+                        cout << "Message from Host: STOP DATA COLLECTION" << endl;
+
                         stop_data_collection_flag = true;
                         db->cons_buf = 1;
-                        state = SM_CLOSE_SOCKET;
+
+                        pthread_join(consumer_t, nullptr);
+
+                        stop_data_collection_flag = false;
+
+                        if (udp_recvfrom_nonblocking(client, recv_buffer, 29) == UDP_DATA_IS_AVAILBLE){
+                            if(strcmp(recv_buffer, "CLIENT: STOP_DATA_COLLECTION") == 0){
+                                state = SM_CLOSE_SOCKET;
+                                break;
+                            }
+                        }
+
+                        state = SM_WAIT_FOR_HOST_START_CMD;
                         break;
                     } else {
                         // something went terribly wrong
@@ -568,6 +583,8 @@ int main(int argc, char *argv[]) {
     // for (int i = 0; i < 350; i++){
     //     printf("data_buffer[%d]  = 0x%X\n", i, data_buffer[i]);
     // }
+
+    cout << "DONE" << endl;
 
     return 0;
 }
