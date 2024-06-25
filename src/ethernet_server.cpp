@@ -97,7 +97,7 @@ struct DB{
     uint32_t double_buffer[2][UDP_MAX_PACKET_SIZE/4]; //note: changed from 1500 which makes sense
     uint8_t prod_buf;
     uint8_t cons_buf;
-    atomic_uint8_t busy; // TODO: change name 
+    atomic_uint8_t cons_busy; // TODO: change name 
     uint16_t dataBufferSize; 
 
     // bad design since client doesnt belong in db struct
@@ -295,29 +295,39 @@ void package_meta_data(uint32_t *meta_data_buffer, DB *db, AmpIO *board){
 void init_db(DB *db, AmpIO *board, udp_info * client){
     db->cons_buf = 0;
     db->prod_buf = 0;
-    db->busy = 0;
+    db->cons_busy = 0;
     db->dataBufferSize = calculate_quadlets_per_packet(board->GetNumEncoders(), board->GetNumMotors()) * 4;
     db->client = client;
 }
 
 void * consume_data(void *arg){
     DB* db = (DB *) arg;
+    int count = 0;
+
+    cout << "consumer starts" << endl;
 
     while(!stop_data_collection_flag){
-        
-        if (!db->busy){
-            continue;
-        }
 
         // need to fix order 
        
 
-        udp_transmit(db->client, db->double_buffer[db->cons_buf], db->dataBufferSize);
-
+        while (1){
+            cout << "we in here huh " << endl;
+            if (db->prod_buf != db->cons_buf){
+                db->cons_busy = 1;
+                udp_transmit(db->client, db->double_buffer[db->cons_buf], db->dataBufferSize);
+                db->cons_busy = 0;
+                break;
+            }
+        }
+        
         db->cons_buf = (db->cons_buf + 1) % 2;
+        cout << "cons_buf count:  " << count++ << endl;
 
-        db->busy = 0;
+        
     }
+
+    cout << "consumer stopped" << endl;
 
     return NULL;
 
@@ -328,6 +338,7 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
 
     int state = SM_WAIT_FOR_HOST_HANDSHAKE;
     char recvBuffer[100] = {0};
+    int count = 0;
 
     uint32_t data_collection_meta[7];
     
@@ -409,6 +420,7 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
                 memset(recvBuffer, 0, 100);
                 // cout << "host start cmd" << endl;
                 ret_code = udp_recvfrom_nonblocking(client, recvBuffer, 100);
+                cout << "wait for start cmd" << endl;
                 if (ret_code == UDP_DATA_IS_AVAILBLE){
                     cout << "recvd cmd " << recvBuffer << endl; 
                     if(strcmp(recvBuffer, "HOST: START DATA COLLECTION") == 0){
@@ -452,19 +464,20 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
             case SM_PRODUCE_DATA:{
                 
                 // if busy then just repeat
-                if(db->busy){
-                    state = SM_PRODUCE_DATA;
-                    break;
-                }
 
                 load_data_buffer(port, board, db->double_buffer[db->prod_buf]);
 
                 // need check for if producer overruns consumer 
                 // wait for consumer to finish
 
-                db->busy = 1;
-
-                db->prod_buf = (db->prod_buf + 1) % 2;
+                while (1){
+                    if (!db->cons_busy){
+                        db->prod_buf = (db->prod_buf + 1) % 2;
+                        cout << "prod_buf count: " << count++ << endl;
+                        break;
+                    }
+                }
+                
 
                 state = SM_CHECK_FOR_STOP_DATA_COLLECTION_CMD;
                 break;
@@ -481,9 +494,20 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
                         cout << "Message from Host: STOP DATA COLLECTION" << endl;
 
                         stop_data_collection_flag = true;
-                        db->cons_buf = 1;
+                        
+                        // using these conditionals just to break out of the 
+                        // while loops in the producer and consumer
+                        db->cons_busy = 0;
+                        db->cons_buf = 0;
+                        db->prod_buf = 1;
 
                         pthread_join(consumer_t, nullptr);
+
+                        db->cons_buf = db->prod_buf = 0;
+
+                        
+
+                        cout << "has the cons thread been joined" <<endl;
 
                         stop_data_collection_flag = false;
 

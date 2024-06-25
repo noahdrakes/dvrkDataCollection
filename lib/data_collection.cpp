@@ -15,7 +15,8 @@
 #include <fstream>
 #include <string>
 #include "data_collection.hpp"
-
+#include <time.h>
+#include "stdio.h"
 using namespace std;
 
 ///////////////////////
@@ -77,6 +78,8 @@ bool DataCollection :: collect_data(){
 
     std::cout << "finna start data collection" << endl;
 
+    time_t * timer;
+
     while(sm_state != SM_EXIT){
 
         switch(sm_state){
@@ -98,6 +101,13 @@ bool DataCollection :: collect_data(){
                 std::cout << "stop data collection flag: " << stop_data_collection_flag << endl;
 
                 ofstream myFile;
+
+                // struct tm* ptr;
+                // time_t t;
+                // t = time(NULL);
+                // ptr = localtime(&t);
+                // printf("%s", asctime(ptr));
+
                 myFile.open("data.csv");
 
                 stop_data_collection_flag = false;
