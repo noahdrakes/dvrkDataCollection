@@ -78,8 +78,6 @@ bool DataCollection :: collect_data(){
 
     std::cout << "finna start data collection" << endl;
 
-    time_t * timer;
-
     while(sm_state != SM_EXIT){
 
         switch(sm_state){
@@ -91,7 +89,7 @@ bool DataCollection :: collect_data(){
             }
 
             case SM_START_DATA_COLLECTION:{
-                time.start = std::chrono::high_resolution_clock::now();
+                curr_time.start = std::chrono::high_resolution_clock::now();
                 float time_elapsed = 0; 
                 int count = 0;
 
@@ -102,13 +100,15 @@ bool DataCollection :: collect_data(){
 
                 ofstream myFile;
 
-                // struct tm* ptr;
-                // time_t t;
-                // t = time(NULL);
-                // ptr = localtime(&t);
-                // printf("%s", asctime(ptr));
+                
+                time_t t = time(NULL);
+                struct tm* ptr = localtime(&t);
 
-                myFile.open("data.csv");
+                string date_and_time = asctime(ptr);
+                date_and_time.pop_back();
+                
+                string filename = "fe_data | " + date_and_time + ".csv";
+                myFile.open(filename);
 
                 stop_data_collection_flag = false;
 
@@ -156,11 +156,11 @@ bool DataCollection :: collect_data(){
 
                 cout << "here" << endl;
 
-                time.end = std::chrono::high_resolution_clock::now();
-                time.elapsed = calculate_duration_as_float(time.start, time.end);
+                curr_time.end = std::chrono::high_resolution_clock::now();
+                curr_time.elapsed = calculate_duration_as_float(curr_time.start, curr_time.end);
 
 
-                cout << "DATA COLLECTION COMPLETE! Time Elapsed: " << time.elapsed << "s" << endl;
+                cout << "DATA COLLECTION COMPLETE! Time Elapsed: " << curr_time.elapsed << "s" << endl;
                 cout << "data stored to data.csv" << endl;
 
                 collect_data_ret = true;

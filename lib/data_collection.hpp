@@ -41,7 +41,7 @@ class DataCollection{
             std::chrono::time_point<std::chrono::high_resolution_clock> start;
             std::chrono::time_point<std::chrono::high_resolution_clock> end;
             float elapsed;
-        } time ;
+        } curr_time ;
 
         // time variables for timed captures
         std::chrono::time_point<std::chrono::high_resolution_clock> start_time;
