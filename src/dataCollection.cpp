@@ -110,7 +110,8 @@ int main(int argc, char *argv[]) {
     }
 
     int count = 0;
-    while(count != 3){
+    while(count < 3){
+        cout << "count:  " << count << endl;
         ret = DC->start();
 
         if (!ret){
@@ -135,9 +136,11 @@ int main(int argc, char *argv[]) {
 
         count++;
 
+        
+
     }
     
-    ret = DC->stop();
+    ret = DC->terminate();
 
     return 0;
 }

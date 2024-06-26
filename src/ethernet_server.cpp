@@ -258,6 +258,7 @@ static bool load_data_buffer(BasePort *Port, AmpIO *Board, uint32_t *data_buffer
 
         // DATA 2: num of encoders and num of motors
         data_buffer[count++] = (uint32_t)(num_encoders << 16) | (num_motors);
+        
 
         // DATA 3: encoder position (for num_encoders)
         for (int i = 0; i < num_encoders; i++){
@@ -308,11 +309,8 @@ void * consume_data(void *arg){
 
     while(!stop_data_collection_flag){
 
-        // need to fix order 
-       
-
         while (1){
-            cout << "we in here huh " << endl;
+            // cout << "we in here huh " << endl;
             if (db->prod_buf != db->cons_buf){
                 db->cons_busy = 1;
                 udp_transmit(db->client, db->double_buffer[db->cons_buf], db->dataBufferSize);
@@ -320,6 +318,7 @@ void * consume_data(void *arg){
                 break;
             }
         }
+
         
         db->cons_buf = (db->cons_buf + 1) % 2;
         cout << "cons_buf count:  " << count++ << endl;
@@ -347,6 +346,8 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
 
     pthread_t consumer_t;
 
+
+
     while(state != SM_EXIT){     
 
         switch(state){
@@ -358,6 +359,7 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
                         state = SM_SEND_DATA_COLLECTION_METADATA;
                         break;
                     } 
+                    
                 } else if (ret_code == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT){
                     break;
                 } else {
@@ -427,8 +429,20 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
                         cout << "Received Message from Host: START DATA COLLECTION" << endl;
                         state = SM_START_DATA_COLLECTION;
                         break;
-                    } else {
-                        state = SM_SEND_READY_STATE_TO_HOST;
+                    } 
+                    else if (strcmp(recvBuffer, "CLIENT: Terminate Server") == 0){
+                        cout << "Terminating Server.." << endl;
+                        state = SM_CLOSE_SOCKET;
+                        break;
+                    }
+                    else {
+                        // TODO: need to add this invalid conidtion thing
+                        // state = SM_SEND_READY_STATE_TO_HOST;
+                        // while (1){
+                            cout << "recv Buffer: " << recvBuffer << endl;
+                            cout << "INVALID ENTRY" << endl;
+                            state = SM_CLOSE_SOCKET;
+                        // }
                         break;
                     }
                 } else if (ret_code == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT){
@@ -470,13 +484,26 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
                 // need check for if producer overruns consumer 
                 // wait for consumer to finish
 
+                // if (db->double_buffer[db->prod_buf][26] != 262148){
+                //     cout << "AYE SOMETHINGS FISHY" << endl;
+                //     cout << "data: " << db->double_buffer[db->prod_buf][26] << endl;
+                //     // cout << "prod buf count: " << count;
+
+                //     while(1){
+                        
+                //     }
+                // }
+
                 while (1){
+                    cout << "is cons busy" << endl; 
                     if (!db->cons_busy){
                         db->prod_buf = (db->prod_buf + 1) % 2;
                         cout << "prod_buf count: " << count++ << endl;
                         break;
                     }
                 }
+
+                
                 
 
                 state = SM_CHECK_FOR_STOP_DATA_COLLECTION_CMD;
@@ -503,20 +530,14 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
 
                         pthread_join(consumer_t, nullptr);
 
-                        db->cons_buf = db->prod_buf = 0;
-
-                        
+                        db->cons_buf = 0;
+                        db->prod_buf = 0;
+                        db->cons_busy = 0;
+                        stop_data_collection_flag = false;
 
                         cout << "has the cons thread been joined" <<endl;
 
-                        stop_data_collection_flag = false;
-
-                        if (udp_recvfrom_nonblocking(client, recv_buffer, 29) == UDP_DATA_IS_AVAILBLE){
-                            if(strcmp(recv_buffer, "CLIENT: STOP_DATA_COLLECTION") == 0){
-                                state = SM_CLOSE_SOCKET;
-                                break;
-                            }
-                        }
+                        
 
                         state = SM_WAIT_FOR_HOST_START_CMD;
                         break;
@@ -539,7 +560,14 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
                 } else{
                     cout << "DATA COLLECTION FINISHED! Success !" << endl;
                 }
-            
+
+                cout << "terminado" << endl;
+                cout << "count: " << count << endl; 
+                char terminationSuccessfulCmd[] = "Server: Termination Successful";
+                // for (int i = 0; i < 100; i++){
+                    udp_transmit(client, terminationSuccessfulCmd, 31);
+                // }
+                
                 close(client->socket);
                 state = SM_EXIT;
                 break;

@@ -83,9 +83,12 @@ bool DataCollection :: collect_data(){
         switch(sm_state){
             case SM_SEND_START_DATA_COLLECTIION_CMD_TO_PS:{
                 std::cout << "sent start data collection command" << endl;
+
                 udp_transmit(sock_id, startDataCollectionCMD, 28);
+
                 sm_state = SM_START_DATA_COLLECTION;
                 break;
+                
             }
 
             case SM_START_DATA_COLLECTION:{
@@ -105,8 +108,8 @@ bool DataCollection :: collect_data(){
                 struct tm* ptr = localtime(&t);
 
                 string date_and_time = asctime(ptr);
-                date_and_time.pop_back();
-                
+                date_and_time.pop_back(); // remove newline character
+
                 string filename = "fe_data | " + date_and_time + ".csv";
                 myFile.open(filename);
 
@@ -125,7 +128,7 @@ bool DataCollection :: collect_data(){
                         // packet are not the same
                         if (temp != data_buffer[0]){
 
-                            count = 0;
+                            count++;
                             for (int i = 0; i < dc_meta.data_buffer_size / 4 ; i+= dc_meta.size_of_sample){
                                 
                                 for (int j = i; j < i + dc_meta.size_of_sample; j++){
@@ -162,12 +165,17 @@ bool DataCollection :: collect_data(){
 
                 cout << "DATA COLLECTION COMPLETE! Time Elapsed: " << curr_time.elapsed << "s" << endl;
                 cout << "data stored to data.csv" << endl;
+                cout << "count: " << count << endl;
 
                 collect_data_ret = true;
                 // sm_state = SM_CLOSE_SOCKET;
                 sm_state = SM_EXIT;
                 break;
             }
+
+            // TODO: need to add close socket protocol back to client
+            // right now the socket isn't closing at all
+            // prob dependent on isDataCollectionRunningFlag
 
             // case SM_CLOSE_SOCKET:{
 
@@ -346,9 +354,38 @@ bool DataCollection :: stop(){
 
     
 
-    // sleep(1);
+    usleep(10000);
     return true;
 }
 
+
+bool DataCollection :: terminate(){
+    char terminateClientAndServerCmd[] = "CLIENT: Terminate Server";
+    char recvBuffer[100] = {0};
+
+    if( !udp_transmit(sock_id, terminateClientAndServerCmd, sizeof(terminateClientAndServerCmd)) ){
+        cout << "[ERROR]: UDP error. check connection with host!" << endl;
+    }
+
+    while (1){
+        int ret = udp_nonblocking_receive(sock_id, recvBuffer, 100);
+
+        if (ret == UDP_DATA_IS_AVAILBLE){
+            if(strcmp(recvBuffer, "Server: Termination Successful") == 0){
+                cout << "termination sucessful" << endl;
+                break;
+            } 
+            
+            // else {
+            //     cout << "bad data brahhhh" << endl;
+            //     printf("data: %s", recvBuffer);
+            //     return false;
+            // }
+        }        
+    }
+
+    close(sock_id);
+    return true;
+}
 
 

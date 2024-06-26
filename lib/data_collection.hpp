@@ -71,6 +71,7 @@ class DataCollection{
         bool init(uint8_t boardID);
         bool start();
         bool stop();
+        bool terminate();
 };
 
 
