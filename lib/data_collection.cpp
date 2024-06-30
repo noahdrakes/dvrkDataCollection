@@ -62,6 +62,8 @@ void DataCollection::load_meta_data(uint32_t *meta_data){
 
 bool DataCollection :: collect_data(){
 
+    
+
     printf("enter collect data\n");
 
     if (isDataCollectionRunning){
@@ -70,6 +72,7 @@ bool DataCollection :: collect_data(){
     }
 
     isDataCollectionRunning = true;
+     stop_data_collection_flag = false;
     
 
     char startDataCollectionCMD[] = "HOST: START DATA COLLECTION";
@@ -84,7 +87,11 @@ bool DataCollection :: collect_data(){
             case SM_SEND_START_DATA_COLLECTIION_CMD_TO_PS:{
                 std::cout << "sent start data collection command" << endl;
 
+                
+
                 udp_transmit(sock_id, startDataCollectionCMD, 28);
+
+                
 
                 sm_state = SM_START_DATA_COLLECTION;
                 break;
@@ -99,7 +106,7 @@ bool DataCollection :: collect_data(){
                 char endDataCollectionCmd[] = "CLIENT: STOP_DATA_COLLECTION";
                 uint32_t temp = 0;
 
-                std::cout << "stop data collection flag: " << stop_data_collection_flag << endl;
+                // std::cout << "stop data collection flag: " << stop_data_collection_flag << endl;
 
                 ofstream myFile;
 
@@ -113,25 +120,42 @@ bool DataCollection :: collect_data(){
                 string filename = "fe_data | " + date_and_time + ".csv";
                 myFile.open(filename);
 
-                stop_data_collection_flag = false;
+               
+
+                memset(data_buffer, 0, sizeof(data_buffer));
+
+                // clear udp buffer
+                while( udp_nonblocking_receive(sock_id, data_buffer, dc_meta.data_buffer_size) == UDP_DATA_IS_AVAILBLE){}
+
+                
 
             
                 while(!stop_data_collection_flag){
-
+                    
+                    // look here maybe
                     int ret_code = udp_nonblocking_receive(sock_id, data_buffer, dc_meta.data_buffer_size);
 
-                    if (ret_code == UDP_DATA_IS_AVAILBLE){
+                    if (ret_code > 0){
                         
                         // might need to use timestamp to verify that this is truly new data
                         // index 0 is always the time stamp
                         // so im confirming that the timestamp from this packet and the previous 
                         // packet are not the same
-                        if (temp != data_buffer[0]){
+                        if (temp != data_buffer[0] && (data_buffer[0]!=0 )){
+                            
+                            // for (int i = 0; i < 350; i++){
+                            //     printf("databuffer[%d] = %d\n", i, data_buffer[i]);
+                            // }
+
+                            // while(1){}
 
                             count++;
                             for (int i = 0; i < dc_meta.data_buffer_size / 4 ; i+= dc_meta.size_of_sample){
                                 
                                 for (int j = i; j < i + dc_meta.size_of_sample; j++){
+
+                                    // printf("data_buffer[%d] = %d\n", j, data_buffer[j]);
+
                                     myFile << data_buffer[j];
 
                                     if (j != (i + dc_meta.size_of_sample - 1)){
@@ -141,13 +165,11 @@ bool DataCollection :: collect_data(){
                                 myFile << "\n";
 
                             }
-                        }                        
+                        }          
+
+                        // while(1){}              
                     // check for udp errors
-                    } else if (ret_code != UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT){
-                        cout << "no data brah" << endl;
-                        collect_data_ret = false;
-                        return false;
-                    }
+                    } 
 
                     // TODO: NEED TO ADD AN ERROR COUNTER TO TERMINATE CLIENT WHEN NO DATA IS AVAILABLE FOR LIKE
                     // 1000 PASSES. 
@@ -158,6 +180,9 @@ bool DataCollection :: collect_data(){
                 myFile.close();
 
                 cout << "here" << endl;
+
+                // clear the udp buffer by reading until the buffer is empty
+               
 
                 curr_time.end = std::chrono::high_resolution_clock::now();
                 curr_time.elapsed = calculate_duration_as_float(curr_time.start, curr_time.end);
@@ -246,7 +271,7 @@ bool DataCollection :: init(uint8_t boardID){
 
             case SM_RECV_DATA_COLLECTION_META_DATA:{
                 ret_code = udp_nonblocking_receive(sock_id, meta_data, sizeof(meta_data));
-                if (ret_code == UDP_DATA_IS_AVAILBLE){
+                if (ret_code > 0){
                     if (meta_data[0] == METADATA_MAGIC_NUMBER){
                         cout << "Received Message from Zynq: RECEIVED METADATA" << endl;
 
@@ -286,7 +311,7 @@ bool DataCollection :: init(uint8_t boardID){
 
             case SM_WAIT_FOR_PS_HANDSHAKE:{
                 ret_code = udp_nonblocking_receive(sock_id, recvBuffer, sizeof(recvBuffer));
-                if (ret_code == UDP_DATA_IS_AVAILBLE){
+                if (ret_code > 0){
                     if (strcmp(recvBuffer, "ZYNQ: READY FOR DATA COLLECTION") == 0){
                         cout << "Received Message from Zynq: READY FOR DATA COLLECTION" << endl;
                         sm_state = SM_SEND_START_DATA_COLLECTIION_CMD_TO_PS;
@@ -325,10 +350,14 @@ bool DataCollection :: start(){
         return 1;
     }
 
+    pthread_detach(collect_data_t);
+
     return true;
 }
 
 bool DataCollection :: stop(){
+
+    
 
     char endDataCollectionCmd[] = "CLIENT: STOP_DATA_COLLECTION";
 
@@ -337,24 +366,39 @@ bool DataCollection :: stop(){
     //     return false;
     // }
 
+
     isDataCollectionRunning = false;
      
     stop_data_collection_flag = true;
+
+    pthread_join(collect_data_t, nullptr);
+
+   
+
+    
 
     // send end data collection cmd
     if( !udp_transmit(sock_id, endDataCollectionCmd, sizeof(endDataCollectionCmd)) ){
         cout << "[ERROR]: UDP error. check connection with host!" << endl;
     }
 
+     
+
+    
+
     cout << "STOP DATA COLLECTION" << endl;
 
     
 
-    pthread_join(collect_data_t, nullptr);
+    
 
     
 
-    usleep(10000);
+    usleep(1000000);
+
+    
+
+    
     return true;
 }
 
@@ -370,17 +414,17 @@ bool DataCollection :: terminate(){
     while (1){
         int ret = udp_nonblocking_receive(sock_id, recvBuffer, 100);
 
-        if (ret == UDP_DATA_IS_AVAILBLE){
+        if (ret > 0){
             if(strcmp(recvBuffer, "Server: Termination Successful") == 0){
                 cout << "termination sucessful" << endl;
                 break;
             } 
             
-            // else {
-            //     cout << "bad data brahhhh" << endl;
-            //     printf("data: %s", recvBuffer);
-            //     return false;
-            // }
+            else {
+                cout << "bad data brahhhh" << endl;
+                printf("data: %s", recvBuffer);
+                return false;
+            }
         }        
     }
 

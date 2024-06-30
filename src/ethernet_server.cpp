@@ -299,36 +299,43 @@ void init_db(DB *db, AmpIO *board, udp_info * client){
     db->cons_busy = 0;
     db->dataBufferSize = calculate_quadlets_per_packet(board->GetNumEncoders(), board->GetNumMotors()) * 4;
     db->client = client;
+
+    memset(db->double_buffer, 0, sizeof(db->double_buffer));
 }
 
 void * consume_data(void *arg){
-    DB* db = (DB *) arg;
+        DB* db = (DB*)arg;
     int count = 0;
 
-    cout << "consumer starts" << endl;
+    // cout << "consumer starts" << endl;
 
-    while(!stop_data_collection_flag){
+    while (!stop_data_collection_flag) {
+        if (db->prod_buf != db->cons_buf) {
+            db->cons_busy = 1; // Mark consumer as busy
+            
+            udp_transmit(db->client, db->double_buffer[db->cons_buf], db->dataBufferSize);
 
-        while (1){
-            // cout << "we in here huh " << endl;
-            if (db->prod_buf != db->cons_buf){
-                db->cons_busy = 1;
-                udp_transmit(db->client, db->double_buffer[db->cons_buf], db->dataBufferSize);
-                db->cons_busy = 0;
-                break;
-            }
+            // if (count == 0){
+            //         for (int i = 0; i < 350; i++){
+            //             printf("dbc[%d] = %d\n", i, db->double_buffer[db->cons_buf][i]);
+            //         }
+                    
+            //     }
+
+            db->cons_busy = 0; // Mark consumer as not busy
+            
+            db->cons_buf = (db->cons_buf + 1) % 2;
+            // cout << "cons_buf count: " << count++ << endl;'
+
+            
+
+            count++;
         }
-
-        
-        db->cons_buf = (db->cons_buf + 1) % 2;
-        cout << "cons_buf count:  " << count++ << endl;
-
-        
     }
 
-    cout << "consumer stopped" << endl;
+    // cout << "consumer stopped" << endl;
 
-    return NULL;
+    return nullptr;
 
 }
 
@@ -339,14 +346,14 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
     char recvBuffer[100] = {0};
     int count = 0;
 
+    int capture_count = 1;
+
     uint32_t data_collection_meta[7];
     
     // condition variable 
     int ret_code = 0;
 
     pthread_t consumer_t;
-
-
 
     while(state != SM_EXIT){     
 
@@ -419,12 +426,13 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
             }
 
             case SM_WAIT_FOR_HOST_START_CMD: {
+                // cout << "WAIT FOR START CMDDDDD " << endl;
                 memset(recvBuffer, 0, 100);
                 // cout << "host start cmd" << endl;
                 ret_code = udp_recvfrom_nonblocking(client, recvBuffer, 100);
-                cout << "wait for start cmd" << endl;
+                // cout << "wait for start cmd" << endl;
                 if (ret_code == UDP_DATA_IS_AVAILBLE){
-                    cout << "recvd cmd " << recvBuffer << endl; 
+                    // cout << "recvd cmd " << recvBuffer << endl; 
                     if(strcmp(recvBuffer, "HOST: START DATA COLLECTION") == 0){
                         cout << "Received Message from Host: START DATA COLLECTION" << endl;
                         state = SM_START_DATA_COLLECTION;
@@ -446,7 +454,13 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
                         break;
                     }
                 } else if (ret_code == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT){
-                    state = SM_SEND_READY_STATE_TO_HOST;
+
+                    if (capture_count == 1){
+                        state = SM_SEND_READY_STATE_TO_HOST;
+                    } else if (capture_count > 1){
+                        state = SM_WAIT_FOR_HOST_START_CMD;
+                    }
+                    
                     break;
                 } else {
                     // UDP error
@@ -458,6 +472,10 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
 
             case SM_START_DATA_COLLECTION:{
 
+                init_db(db, board, client);
+
+                stop_data_collection_flag = false;
+
                 // set start time for data collection
                 start_time = std::chrono::high_resolution_clock::now();
                 state = SM_START_CONSUMER_THREAD;
@@ -466,10 +484,20 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
 
             case SM_START_CONSUMER_THREAD:{
 
+                // pthread_t new_cons_t;
+
+                
+                
+
                 if (pthread_create(&consumer_t, nullptr, consume_data, db) != 0) {
                     std::cerr << "Error creating consumer thread" << std::endl;
                     return 1;
                 }
+
+                pthread_detach(consumer_t);
+
+                
+
 
                 state = SM_PRODUCE_DATA;
                 break;
@@ -479,7 +507,13 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
                 
                 // if busy then just repeat
 
+                
+
                 load_data_buffer(port, board, db->double_buffer[db->prod_buf]);
+
+                
+
+                
 
                 // need check for if producer overruns consumer 
                 // wait for consumer to finish
@@ -494,17 +528,13 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
                 //     }
                 // }
 
-                while (1){
-                    cout << "is cons busy" << endl; 
-                    if (!db->cons_busy){
-                        db->prod_buf = (db->prod_buf + 1) % 2;
-                        cout << "prod_buf count: " << count++ << endl;
-                        break;
-                    }
-                }
+                while (db->cons_busy) {}
 
-                
-                
+                // Switch to the next buffer
+                db->prod_buf = (db->prod_buf + 1) % 2;
+                // cout << "prod_buf count: " << count++ << endl;
+
+                count++;
 
                 state = SM_CHECK_FOR_STOP_DATA_COLLECTION_CMD;
                 break;
@@ -518,26 +548,37 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
 
                     if(strcmp(recv_buffer, "CLIENT: STOP_DATA_COLLECTION") == 0){
 
+                        count =0;
+
                         cout << "Message from Host: STOP DATA COLLECTION" << endl;
+
+                        // if (count == 0){
+                        //     for (int i = 0; i < 350; i++){
+                        //         printf("dbc[%d] = %d\n", i, db->double_buffer[db->cons_buf][i]);
+                        //     }
+                    
+                        // }
 
                         stop_data_collection_flag = true;
                         
+                        
                         // using these conditionals just to break out of the 
                         // while loops in the producer and consumer
-                        db->cons_busy = 0;
-                        db->cons_buf = 0;
-                        db->prod_buf = 1;
+                        while (db->cons_busy) {}
+
+                        // cout << "before join" << endl;
 
                         pthread_join(consumer_t, nullptr);
-
-                        db->cons_buf = 0;
-                        db->prod_buf = 0;
-                        db->cons_busy = 0;
-                        stop_data_collection_flag = false;
-
-                        cout << "has the cons thread been joined" <<endl;
-
                         
+                        
+                        // cout << "after join" << endl;
+
+
+                        // cout << "DATA BUFFER SIZE: " << db->dataBufferSize << endl;
+
+                        // cout << "has the cons thread been joined" <<endl;
+
+                        capture_count++;
 
                         state = SM_WAIT_FOR_HOST_START_CMD;
                         break;
@@ -629,11 +670,15 @@ int main(int argc, char *argv[]) {
 
     dataCollectionStateMachine(&client, Port, Board, &db);
 
-    // uint32_t data_buffer[350];
+    // Port->ReadAllBoards();
+
+    // uint32_t data_buffer[361];
+    // load_data_buffer(Port, Board, data_buffer);
+    // load_data_buffer(Port, Board, data_buffer);
     // load_data_buffer(Port, Board, data_buffer);
 
-    // for (int i = 0; i < 350; i++){
-    //     printf("data_buffer[%d]  = 0x%X\n", i, data_buffer[i]);
+    // for (int i = 0; i < 361; i++){
+    //     printf("data_buffer[%d]  = %d\n", i, data_buffer[i]);
     // }
 
     cout << "DONE" << endl;

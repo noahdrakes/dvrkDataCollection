@@ -110,7 +110,7 @@ int main(int argc, char *argv[]) {
     }
 
     int count = 0;
-    while(count < 3){
+    while(count < 5){
         cout << "count:  " << count << endl;
         ret = DC->start();
 
@@ -144,5 +144,4 @@ int main(int argc, char *argv[]) {
 
     return 0;
 }
-
 

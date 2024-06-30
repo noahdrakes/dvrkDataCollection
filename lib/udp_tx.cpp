@@ -6,36 +6,35 @@
 #include <netinet/in.h>
 #include <unistd.h>
 #include <arpa/inet.h>
-#include <cstdio>
-#include <cstring>
-#include "udp_tx.hpp" 
 #include <getopt.h>
 #include <sys/select.h>
 #include <cstdlib>
-
-// might need to pass in integer for boardID
+#include <atomic>
 
 using namespace std; 
 
+#define UDP_REAL_MTU 1446 // Define the maximum UDP packet size
 
+// Return codes for non-blocking UDP receive
+enum UDP_RETURN_CODES {
+    UDP_DATA_IS_AVAILABLE = 0,
+    UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT,
+    UDP_SELECT_ERROR,
+    UDP_CONNECTION_CLOSED_ERROR,
+    UDP_SOCKET_ERROR
+};
 
-bool udp_init(int * client_socket, uint8_t boardId){
-
+bool udp_init(int *client_socket, uint8_t boardId) {
     int ret;
     char ipAddress[14] = "169.254.10.";
 
-    if (boardId > 15){
+    if (boardId > 15) {
         return false; 
     }
-    
-    // **change sprint statemnt to use %s , no need for conditionals
 
-    
-    snprintf(ipAddress + strlen(ipAddress) , sizeof(ipAddress) - strlen(ipAddress), "%d", boardId);
-
+    snprintf(ipAddress + strlen(ipAddress), sizeof(ipAddress) - strlen(ipAddress), "%d", boardId);
 
     *client_socket = socket(AF_INET, SOCK_DGRAM, 0);
-
 
     if (*client_socket < 0) {
         return false;
@@ -58,49 +57,63 @@ bool udp_init(int * client_socket, uint8_t boardId){
     return true;
 }
 
-bool udp_transmit(int client_socket, void * data, int size){
-    
-    // change UDP_MAX_QUADLET to 
-    if (size > UDP_REAL_MTU){
+bool udp_transmit(int client_socket, void *data, int size) {
+    if (size > UDP_REAL_MTU) {
         return false;
     }
 
-    if (send(client_socket, data, size, 0) >= 0){
+    if (send(client_socket, data, size, 0) >= 0) {
         return true;
     } else {
         return false;
-    } 
+    }
 }
 
-// might want to do nonblocking to program a stop key 
-bool udp_receive(int client_socket, void *data, int len)
-{
-        uint16_t recieved_bytes = recv(client_socket, data, len, 0);
+bool udp_receive(int client_socket, void *data, int len) {
+    uint16_t received_bytes = recv(client_socket, data, len, 0);
 
-        if (recieved_bytes > 0){
-            return true;
-        } else {
-            return false;
-        }
+    if (received_bytes > 0) {
+        return true;
+    } else {
+        return false;
+    }
 }
 
-int udp_nonblocking_receive(int client_socket, void *data, int len){
+int isDataAvailable(fd_set *readfds, int client_socket) {
+    struct timeval timeout;
 
+    // Timeout values
+    timeout.tv_sec = 0;          // 0 seconds
+    timeout.tv_usec = 1000;      // 1000 microseconds = 1 millisecond
+
+    int max_fd = client_socket + 1;
+    int activity = select(max_fd, readfds, NULL, NULL, &timeout);
+
+    if (activity < 0) {
+        return UDP_SELECT_ERROR;
+    } else if (activity == 0) {
+        return UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT;
+    } else {
+        return UDP_DATA_IS_AVAILABLE;
+    }
+}
+
+int udp_nonblocking_receive(int client_socket, void *data, int len) {
     fd_set readfds;
     FD_ZERO(&readfds);
     FD_SET(client_socket, &readfds);
 
-    int ret_code = isDataAvailable(&readfds, client_socket) ;
+    int ret_code = isDataAvailable(&readfds, client_socket);
 
-    if(ret_code == UDP_DATA_IS_AVAILBLE ){
+    if (ret_code == UDP_DATA_IS_AVAILABLE) {
         if (FD_ISSET(client_socket, &readfds)) {
             ret_code = recv(client_socket, data, len, 0);
-            if (ret_code == 0){
+            if (ret_code == 0) {
                 return UDP_CONNECTION_CLOSED_ERROR;
-            } else if (ret_code < 0){
+            } else if (ret_code < 0) {
                 return UDP_SOCKET_ERROR;
             } else {
-                return UDP_DATA_IS_AVAILBLE;
+                return ret_code; // Return the number of bytes received
             }
         }
     }
@@ -108,30 +121,7 @@ int udp_nonblocking_receive(int client_socket, void *data, int len){
     return ret_code;
 }
 
-
-
-// checks if data is available from console in or udp buffer
-int isDataAvailable(fd_set *readfds, int client_socket){
-    struct timeval timeout;
-
-    // timeout valus
-    timeout.tv_sec = 0;
-    timeout.tv_usec = 1000;
-
-    int max_fd = client_socket + 1;
-    int activity = select(max_fd, readfds, NULL, NULL, &timeout);
-
-    if (activity < 0){
-        return UDP_SELECT_ERROR;
-    } else if (activity == 0){
-        return UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT;
-    } else {
-        return UDP_DATA_IS_AVAILBLE;
-    }
-}
-
-
-bool udp_close(int * client_socket){
+bool udp_close(int *client_socket) {
     close(*client_socket);
     return true;
 }
