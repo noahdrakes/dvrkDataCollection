@@ -28,6 +28,8 @@ class DataCollection{
             SM_EXIT
         };
 
+        
+
         struct DataColectionMeta{
             string HWVers;
             uint8_t num_motors;
@@ -36,6 +38,17 @@ class DataCollection{
             uint16_t size_of_sample;
             uint16_t samples_per_packet;
         } dc_meta ;
+
+        #define MAX_NUM_ENCODERS    8
+        #define MAX_NUM_MOTORS      10
+
+        struct ProcessedSample{
+            float timestamp;
+            int32_t encoder_position[MAX_NUM_ENCODERS];
+            float encoder_velocity[MAX_NUM_ENCODERS];
+            uint16_t motor_current[MAX_NUM_MOTORS];
+            uint16_t motor_status[MAX_NUM_MOTORS];
+        }proc_sample;
 
         struct DC_Time{
             std::chrono::time_point<std::chrono::high_resolution_clock> start;
@@ -64,6 +77,10 @@ class DataCollection{
         bool collect_data();
 
         void load_meta_data(uint32_t *meta_data);
+
+        // processes sample and uploads it to the 
+        // proc sample struct
+        void process_sample(uint32_t *data_buffer, int start_idx); 
 
         pthread_t collect_data_t;
     public:

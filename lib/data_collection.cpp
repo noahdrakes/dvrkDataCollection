@@ -60,9 +60,34 @@ void DataCollection::load_meta_data(uint32_t *meta_data){
     dc_meta.samples_per_packet = meta_data[6];
 }
 
-bool DataCollection :: collect_data(){
+void DataCollection:: process_sample(uint32_t *data_buffer, int start_idx){
 
+    if (start_idx + dc_meta.size_of_sample > UDP_MAX_QUADLET_PER_PACKET){
+        return;
+    }
+
+    int idx = start_idx;
+
+    proc_sample.timestamp = *reinterpret_cast<float *> (&data_buffer[idx++]);
+    // cout << "timestamp: " << proc_sample.timestamp << endl;
     
+
+    for (int i = 0; i < dc_meta.num_encoders; i++){
+        proc_sample.encoder_position[i] = *reinterpret_cast<int32_t *> (&data_buffer[idx++]);
+        // printf("encoder_pos[%d] = 0x%X\n",i,  proc_sample.encoder_position[i]);
+        proc_sample.encoder_velocity[i] = *reinterpret_cast<float *> (&data_buffer[idx++]);
+        // printf("encoder_velocity[%d] = %f\n", i, proc_sample.encoder_velocity[i]);
+    }
+
+    for (int i = 0; i < dc_meta.num_motors; i++){
+        proc_sample.motor_status[i] = (uint16_t) ((0xFFFF0000 & data_buffer[idx]) >> 16);
+        // printf("motor status[%d] = 0x%X\n", i, proc_sample.motor_status[i]);
+        proc_sample.motor_current[i] = (uint16_t) (0xFFFF) & data_buffer[idx];
+        // printf("motor current[%d] = 0x%X\n", i,  proc_sample.motor_current[i]);
+    }
+}
+
+bool DataCollection :: collect_data(){
 
     printf("enter collect data\n");
 
@@ -86,6 +111,9 @@ bool DataCollection :: collect_data(){
         switch(sm_state){
             case SM_SEND_START_DATA_COLLECTIION_CMD_TO_PS:{
                 std::cout << "sent start data collection command" << endl;
+
+                // clear udp buffer
+                while( udp_nonblocking_receive(sock_id, data_buffer, dc_meta.data_buffer_size) == UDP_DATA_IS_AVAILBLE){}
 
                 
 
@@ -124,8 +152,7 @@ bool DataCollection :: collect_data(){
 
                 memset(data_buffer, 0, sizeof(data_buffer));
 
-                // clear udp buffer
-                while( udp_nonblocking_receive(sock_id, data_buffer, dc_meta.data_buffer_size) == UDP_DATA_IS_AVAILBLE){}
+                
 
                 
 
@@ -152,19 +179,50 @@ bool DataCollection :: collect_data(){
                             count++;
                             for (int i = 0; i < dc_meta.data_buffer_size / 4 ; i+= dc_meta.size_of_sample){
                                 
-                                for (int j = i; j < i + dc_meta.size_of_sample; j++){
+                                // for (int j = i; j < i + dc_meta.size_of_sample; j++){
 
-                                    // printf("data_buffer[%d] = %d\n", j, data_buffer[j]);
+                                //     // printf("data_buffer[%d] = %d\n", j, data_buffer[j]);
 
-                                    myFile << data_buffer[j];
+                                
 
-                                    if (j != (i + dc_meta.size_of_sample - 1)){
+                                //     myFile << data_buffer[j];
+
+                                //     if (j != (i + dc_meta.size_of_sample - 1)){
+                                //         myFile << ",";
+                                //     }
+                                // }
+
+                                process_sample(data_buffer, i);
+                                myFile << proc_sample.timestamp << ",";
+
+                                for (int j = 0; j < dc_meta.num_encoders; j++){
+                                    myFile << proc_sample.encoder_position[j] << ",";
+                                }
+
+                                for (int j = 0; j < dc_meta.num_encoders; j++){
+                                    myFile << proc_sample.encoder_velocity[j] << ",";
+                                }
+
+                                for (int j = 0; j < dc_meta.num_motors; j++){
+                                    myFile << proc_sample.motor_current[j] << ",";
+                                }
+
+                                for (int j = 0; j < dc_meta.num_motors; j++){
+                                    myFile << proc_sample.motor_status[j];
+
+                                    if (j < (dc_meta.num_motors - 1)){
                                         myFile << ",";
                                     }
                                 }
+
+
                                 myFile << "\n";
 
+                                memset(&proc_sample, 0, sizeof(proc_sample));
+
                             }
+
+                            
                         }          
 
                         // while(1){}              
@@ -230,6 +288,8 @@ void * DataCollection::collect_data_thread(void * args){
     dc->collect_data();
     return nullptr;
 }
+
+
 
 ////////////////////
 // PUBLIC METHODS //
