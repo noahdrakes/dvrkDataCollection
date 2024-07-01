@@ -193,12 +193,12 @@ static uint16_t calculate_sizeof_sample(uint8_t num_encoders, uint8_t num_motors
     // SAMPLE STRUCTURE
 
     // Timestamp (32 bit)                                                       [4 byte]
-    // EncoderNum and MotorNum (32 bit -> each are 16 bit)                      [4 byte]
+    // EncoderNum and MotorNum (32 bit -> each are 16 bit)                      [4 byte] - NOT USED ANYMORE
     // Encoder Position (32 * num of encoders)                                  [4 byte * num of encoders]
     // Encoder Velocity Predicted (64 * num of encoders -> truncated to 32bits) [4 bytes * num of encoders]
     // Motur Current and Motor Status (32 * num of Motors -> each are 16 bits)  [4 byte * num of motors]
 
-    return (2 + (1 * num_encoders) + (1 * num_encoders) + (1 * num_motors));
+    return (1 + (1 * num_encoders) + (1 * num_encoders) + (1 * num_motors));
 
 }
 
@@ -257,7 +257,7 @@ static bool load_data_buffer(BasePort *Port, AmpIO *Board, uint32_t *data_buffer
         data_buffer[count++] = *reinterpret_cast<uint32_t *> (&time_elapsed);
 
         // DATA 2: num of encoders and num of motors
-        data_buffer[count++] = (uint32_t)(num_encoders << 16) | (num_motors);
+        // data_buffer[count++] = (uint32_t)(num_encoders << 16) | (num_motors);
         
 
         // DATA 3: encoder position (for num_encoders)

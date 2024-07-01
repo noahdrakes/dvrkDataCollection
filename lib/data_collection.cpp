@@ -82,9 +82,11 @@ void DataCollection:: process_sample(uint32_t *data_buffer, int start_idx){
     for (int i = 0; i < dc_meta.num_motors; i++){
         proc_sample.motor_status[i] = (uint16_t) ((0xFFFF0000 & data_buffer[idx]) >> 16);
         // printf("motor status[%d] = 0x%X\n", i, proc_sample.motor_status[i]);
-        proc_sample.motor_current[i] = (uint16_t) (0xFFFF) & data_buffer[idx];
-        // printf("motor current[%d] = 0x%X\n", i,  proc_sample.motor_current[i]);
+        proc_sample.motor_current[i] = (uint16_t) (0x0000FFFF & data_buffer[idx]);
+        idx++;
+        
     }
+  
 }
 
 bool DataCollection :: collect_data(){
@@ -104,7 +106,7 @@ bool DataCollection :: collect_data(){
 
     sm_state = SM_SEND_START_DATA_COLLECTIION_CMD_TO_PS;
 
-    std::cout << "finna start data collection" << endl;
+    // std::cout << "finna start data collection" << endl;
 
     while(sm_state != SM_EXIT){
 
@@ -149,14 +151,9 @@ bool DataCollection :: collect_data(){
                 myFile.open(filename);
 
                
-
                 memset(data_buffer, 0, sizeof(data_buffer));
 
-                
-
-                
-
-            
+                            
                 while(!stop_data_collection_flag){
                     
                     // look here maybe
@@ -433,32 +430,15 @@ bool DataCollection :: stop(){
 
     pthread_join(collect_data_t, nullptr);
 
-   
-
-    
-
     // send end data collection cmd
     if( !udp_transmit(sock_id, endDataCollectionCmd, sizeof(endDataCollectionCmd)) ){
         cout << "[ERROR]: UDP error. check connection with host!" << endl;
     }
 
      
-
-    
-
     cout << "STOP DATA COLLECTION" << endl;
 
-    
-
-    
-
-    
-
     usleep(1000000);
-
-    
-
-    
     return true;
 }
 
@@ -481,7 +461,7 @@ bool DataCollection :: terminate(){
             } 
             
             else {
-                cout << "bad data brahhhh" << endl;
+                cout << "Termination Failed: recvd = invalid data. probably out of sync with state machine" << endl;
                 printf("data: %s", recvBuffer);
                 return false;
             }
