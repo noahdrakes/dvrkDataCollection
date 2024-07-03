@@ -33,13 +33,16 @@ static bool isExitKeyPressed(){
     FD_ZERO(&readfds);
     FD_SET(STDIN_FILENO, &readfds); // Monitor stdin for input
 
-    char buf[256];  
-    // check if the file descriptor for stdin input has data
-    if (FD_ISSET(STDIN_FILENO, &readfds)) {
-        fgets(buf, sizeof(buf), stdin); // Read input from stdin
+    struct timeval timeout = {0, 0}; // No wait time
+    int ret = select(STDIN_FILENO + 1, &readfds, NULL, NULL, &timeout);
+    
+    if (ret > 0 && FD_ISSET(STDIN_FILENO, &readfds)) {
+        char buf[256];
+        fgets(buf, sizeof(buf), stdin); // Consume input
         return true;
     }
     return false;
+
 }
 
 
@@ -128,6 +131,7 @@ int main(int argc, char *argv[]) {
     
 
     DataCollection *DC = new DataCollection();
+    bool stop_data_collection = false;
 
     ret = DC->init(boardID);
 
@@ -136,9 +140,13 @@ int main(int argc, char *argv[]) {
     }
 
     int count = 0;
-    while(count < 3){
+
+    while(!stop_data_collection){
+    
         cout << "count:  " << count << endl;
         ret = DC->start();
+
+        cout << "\n\n CAPTURE STARTED\n\n" << endl;
 
         if (!ret){
             return -1;
@@ -153,6 +161,8 @@ int main(int argc, char *argv[]) {
                 }
             }
         }
+
+        cout << "\n\ncapture ended\n\n" << endl;
         
         ret = DC->stop();
 
@@ -162,9 +172,26 @@ int main(int argc, char *argv[]) {
 
         count++;
 
-        
+        cout << "Would you like to Start Captures? (y/n)" << endl;
 
+ 
+        // while (!stop){
+        char yn;
+        cin >> yn;
+
+
+        if (yn == 'y'){
+            stop_data_collection = false;
+        } else if (yn == 'n'){
+            stop_data_collection = true;
+            continue;
+        } else {
+            cout << "[error] Invalid character. Type either 'y' or 'n' and press enter: " << endl;
+            stop_data_collection = true;
+            continue;         
+        }
     }
+       
     
     ret = DC->terminate();
 

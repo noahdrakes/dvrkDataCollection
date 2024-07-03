@@ -153,6 +153,8 @@ bool DataCollection :: collect_data(){
                
                 memset(data_buffer, 0, sizeof(data_buffer));
 
+                while( udp_nonblocking_receive(sock_id, data_buffer, dc_meta.data_buffer_size) > 0){}
+
                             
                 while(!stop_data_collection_flag){
                     
@@ -328,7 +330,7 @@ bool DataCollection :: init(uint8_t boardID){
                         break;
                     }
                 } else if (ret_code == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT || ret_code == UDP_NON_UDP_DATA_IS_AVAILABLE){
-                    sm_state = SM_SEND_READY_STATE_TO_PS;
+                    sm_state = SM_RECV_DATA_COLLECTION_META_DATA;
                     break;
                 } else {
                     // sm_state = SM_CLOSE_SOCKET;
@@ -358,7 +360,7 @@ bool DataCollection :: init(uint8_t boardID){
                         break;
                     }
                 } else if (ret_code == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT || ret_code == UDP_NON_UDP_DATA_IS_AVAILABLE){
-                    sm_state = SM_SEND_METADATA_RECV;
+                    sm_state = SM_WAIT_FOR_PS_HANDSHAKE;
                     break;
                 } else {
                     cout << "[ERROR] - UDP fail, check connection with processor" << endl;
@@ -414,7 +416,7 @@ bool DataCollection :: stop(){
         cout << "[ERROR]: UDP error. check connection with host!" << endl;
     }
 
-    while( udp_nonblocking_receive(sock_id, data_buffer, dc_meta.data_buffer_size) > 0){}
+    
 
      
     cout << "STOP DATA COLLECTION" << endl;
@@ -440,15 +442,13 @@ bool DataCollection :: terminate(){
             if(strcmp(recvBuffer, "Server: Termination Successful") == 0){
                 cout << "termination sucessful" << endl;
                 break;
-            } 
-            
-            else {
-                cout << "Termination Failed: recvd = invalid data. probably out of sync with state machine" << endl;
-                printf("data: %s\n", recvBuffer);
-                printf("ret_code: %d\n", ret);
-                return false;
+            } else {
+                cout << "uh oh" << endl;
             }
-        }        
+        } else if (ret == UDP_SELECT_ERROR || ret == UDP_SOCKET_ERROR || ret == UDP_CONNECTION_CLOSED_ERROR) {
+                cout << "Termination Failed: Check UDP connetion" << endl;
+                return false;
+            }   
     }
 
     close(sock_id);
