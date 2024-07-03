@@ -69,6 +69,12 @@ class DataCollection{
 
         bool isDataCollectionRunning;
 
+        int capture_count = 1;
+
+        ofstream myFile;
+
+        string filename;
+
         int sock_id;
         #define METADATA_MAGIC_NUMBER   0xABCDEF12
 

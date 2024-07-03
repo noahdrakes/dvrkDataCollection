@@ -103,32 +103,6 @@ int main(int argc, char *argv[]) {
 
     int client_socket;
     bool ret;
-    // char data[100] ={0};
-    // udp_init(&client_socket, 6);
-
-    // udp_transmit(client_socket, data, sizeof(data));
-
-    // char word[] = {0};
-
-    // if (udp_nonblocking_receive(client_socket, word, 100) > 0){
-    //     printf("first word: %s\n", word);
-    // }
-
-    // memset(word, 0, sizeof(word));
-
-    // if (udp_nonblocking_receive(client_socket, word, 100) > 0){
-    //     printf("second word: %s\n", word);
-    // }
-
-    // memset(word, 0, sizeof(word));
-
-    // if (udp_nonblocking_receive(client_socket, word, 100) > 0){
-    //     printf("third word: %s\n", word);
-    // }
-
-    // close(client_socket);
-    
-    
 
     DataCollection *DC = new DataCollection();
     bool stop_data_collection = false;
@@ -139,43 +113,12 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
-    int count = 0;
+    int count = 1;
 
     while(!stop_data_collection){
-    
-        cout << "count:  " << count << endl;
-        ret = DC->start();
 
-        cout << "\n\n CAPTURE STARTED\n\n" << endl;
+        printf("Woud you like to start capture [%d]? (y/n) :", count);
 
-        if (!ret){
-            return -1;
-        }
-
-        if (timedCaptureFlag){
-            sleep(dataCollectionDuration);
-        } else {
-            while(1){
-                if (isExitKeyPressed()){
-                    break;
-                }
-            }
-        }
-
-        cout << "\n\ncapture ended\n\n" << endl;
-        
-        ret = DC->stop();
-
-        if (!ret){
-            return -1;
-        }
-
-        count++;
-
-        cout << "Would you like to Start Captures? (y/n)" << endl;
-
- 
-        // while (!stop){
         char yn;
         cin >> yn;
 
@@ -190,6 +133,38 @@ int main(int argc, char *argv[]) {
             stop_data_collection = true;
             continue;         
         }
+
+        cout << endl;
+        
+    
+        ret = DC->start();
+        printf("...Press [ENTER] to terminate capture\n");
+        usleep(1000);
+
+
+        if (!ret){
+            return -1;
+        }
+
+        if (timedCaptureFlag){
+            sleep(dataCollectionDuration);
+        } else {
+            while(1){
+                if (isExitKeyPressed()){
+                    break;
+                }
+            }
+        }
+        
+        ret = DC->stop();
+
+        if (!ret){
+            return -1;
+        }
+
+        count++;
+
+        
     }
        
     

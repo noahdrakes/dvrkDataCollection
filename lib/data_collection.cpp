@@ -91,12 +91,12 @@ void DataCollection:: process_sample(uint32_t *data_buffer, int start_idx){
 
 bool DataCollection :: collect_data(){
 
-    printf("enter collect data\n");
-
     if (isDataCollectionRunning){
         collect_data_ret = false;
         return false;
     }
+
+    printf("CAPTURE [%d] in Progress ... ! \n", capture_count);
 
     isDataCollectionRunning = true;
      stop_data_collection_flag = false;
@@ -112,16 +112,8 @@ bool DataCollection :: collect_data(){
 
         switch(sm_state){
             case SM_SEND_START_DATA_COLLECTIION_CMD_TO_PS:{
-                std::cout << "sent start data collection command" << endl;
-
-                // clear udp buffer
-                // while( udp_nonblocking_receive(sock_id, data_buffer, dc_meta.data_buffer_size) > 0){}
-
-                
 
                 udp_transmit(sock_id, startDataCollectionCMD, 28);
-
-                
 
                 sm_state = SM_START_DATA_COLLECTION;
                 break;
@@ -138,7 +130,7 @@ bool DataCollection :: collect_data(){
 
                 // std::cout << "stop data collection flag: " << stop_data_collection_flag << endl;
 
-                ofstream myFile;
+                
 
                 
                 time_t t = time(NULL);
@@ -147,7 +139,7 @@ bool DataCollection :: collect_data(){
                 string date_and_time = asctime(ptr);
                 date_and_time.pop_back(); // remove newline character
 
-                string filename = "fe_data | " + date_and_time + ".csv";
+                filename = "fe_data | " + date_and_time + ".csv";
                 myFile.open(filename);
 
                
@@ -211,22 +203,7 @@ bool DataCollection :: collect_data(){
                     temp = data_buffer[0]; 
                 }
 
-                myFile.close();
 
-                cout << "here" << endl;
-
-                // clear the udp buffer by reading until the buffer is empty
-               
-
-                curr_time.end = std::chrono::high_resolution_clock::now();
-                curr_time.elapsed = calculate_duration_as_float(curr_time.start, curr_time.end);
-
-
-                cout << "DATA COLLECTION COMPLETE! Time Elapsed: " << curr_time.elapsed << "s" << endl;
-                cout << "data stored to data.csv" << endl;
-                cout << "count: " << count << endl;
-
-                collect_data_ret = true;
                 // sm_state = SM_CLOSE_SOCKET;
                 sm_state = SM_EXIT;
                 break;
@@ -252,15 +229,12 @@ bool DataCollection :: collect_data(){
         }
     }
 
-    cout << "do we return true" << endl;
-
     return true;
 }
 
 void * DataCollection::collect_data_thread(void * args){
     DataCollection *dc = static_cast<DataCollection *>(args);
 
-    cout << "after casting void pointer to data collection object" << endl;
     dc->collect_data();
     return nullptr;
 }
@@ -273,7 +247,7 @@ void * DataCollection::collect_data_thread(void * args){
 
 
 DataCollection::DataCollection(){
-    cout << "New Data Collection Object !" << endl;
+    cout << "New Data Collection Object !" << endl << endl;
     isDataCollectionRunning = false;
     stop_data_collection_flag = false;
 }
@@ -309,17 +283,18 @@ bool DataCollection :: init(uint8_t boardID){
                 ret_code = udp_nonblocking_receive(sock_id, meta_data, sizeof(meta_data));
                 if (ret_code > 0){
                     if (meta_data[0] == METADATA_MAGIC_NUMBER){
-                        cout << "Received Message from Zynq: RECEIVED METADATA" << endl;
+                        cout << "Received Message from Zynq: RECEIVED METADATA" << endl << endl;
 
                         load_meta_data(meta_data);
 
-                        cout << "- DATA COLLECTION METADATA -" << endl;
+                        cout << "---- DATA COLLECTION METADATA ---" << endl;
                         cout << "Hardware Version: " << dc_meta.HWVers << endl;
                         cout << "Num of Encoders:  " <<  +dc_meta.num_encoders << endl;
                         cout << "Num of Motors: " << +dc_meta.num_motors << endl;
                         cout << "DataBuffer Size: " << dc_meta.data_buffer_size << endl;
                         cout << "Samples per Packet: " << dc_meta.samples_per_packet << endl;
                         cout << "Sizoef Samples (in bytes): " << dc_meta.size_of_sample << endl;
+                        cout << "----------------------------------" << endl << endl;
                         
                         sm_state = SM_SEND_METADATA_RECV;
                         break;
@@ -388,12 +363,28 @@ bool DataCollection :: start(){
         return 1;
     }
 
-    pthread_detach(collect_data_t);
-
     return true;
 }
 
 bool DataCollection :: stop(){
+
+
+    myFile.close();
+
+
+    // clear the udp buffer by reading until the buffer is empty
+    
+
+    curr_time.end = std::chrono::high_resolution_clock::now();
+    curr_time.elapsed = calculate_duration_as_float(curr_time.start, curr_time.end);
+
+
+    cout << "---------------------------------------------------------" << endl;
+    printf("STOPPED CAPTURE [%d] ! Time Elapsed: %fs\n", capture_count++, curr_time.elapsed);
+    cout << "Data stored to " << filename << "." << endl;
+    cout << "---------------------------------------------------------" << endl << endl;
+
+    collect_data_ret = true;
 
     
 
@@ -416,10 +407,6 @@ bool DataCollection :: stop(){
         cout << "[ERROR]: UDP error. check connection with host!" << endl;
     }
 
-    
-
-     
-    cout << "STOP DATA COLLECTION" << endl;
 
     usleep(1000);
     return true;
@@ -434,16 +421,15 @@ bool DataCollection :: terminate(){
         cout << "[ERROR]: UDP error. check connection with host!" << endl;
     }
 
-
     while (1){
         int ret = udp_nonblocking_receive(sock_id, recvBuffer, 31);
 
         if (ret > 0){
             if(strcmp(recvBuffer, "Server: Termination Successful") == 0){
-                cout << "termination sucessful" << endl;
+                cout << "Terminated Data Collection Server on Zynq !" << endl;
                 break;
             } else {
-                cout << "uh oh" << endl;
+                // need something here
             }
         } else if (ret == UDP_SELECT_ERROR || ret == UDP_SOCKET_ERROR || ret == UDP_CONNECTION_CLOSED_ERROR) {
                 cout << "Termination Failed: Check UDP connetion" << endl;
