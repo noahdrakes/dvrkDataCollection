@@ -11,18 +11,14 @@
 #include <cstdlib>
 #include <atomic>
 
+#include "udp_tx.hpp"
+
 using namespace std; 
 
 #define UDP_REAL_MTU 1446 // Define the maximum UDP packet size
 
 // Return codes for non-blocking UDP receive
-enum UDP_RETURN_CODES {
-    UDP_DATA_IS_AVAILABLE = 0,
-    UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT,
-    UDP_SELECT_ERROR,
-    UDP_CONNECTION_CLOSED_ERROR,
-    UDP_SOCKET_ERROR
-};
+
 
 bool udp_init(int *client_socket, uint8_t boardId) {
     int ret;
@@ -79,35 +75,31 @@ bool udp_receive(int client_socket, void *data, int len) {
     }
 }
 
-int isDataAvailable(fd_set *readfds, int client_socket) {
-    struct timeval timeout;
-
-    // Timeout values
-    timeout.tv_sec = 0;          // 0 seconds
-    timeout.tv_usec = 1000;      // 1000 microseconds = 1 millisecond
-
-    int max_fd = client_socket + 1;
-    int activity = select(max_fd, readfds, NULL, NULL, &timeout);
-
-    if (activity < 0) {
-        return UDP_SELECT_ERROR;
-    } else if (activity == 0) {
-        return UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT;
-    } else {
-        return UDP_DATA_IS_AVAILABLE;
-    }
-}
 
 int udp_nonblocking_receive(int client_socket, void *data, int len) {
     fd_set readfds;
     FD_ZERO(&readfds);
     FD_SET(client_socket, &readfds);
 
-    int ret_code = isDataAvailable(&readfds, client_socket);
+    int ret_code;
 
-    if (ret_code == UDP_DATA_IS_AVAILABLE) {
+    struct timeval timeout;
+
+    // Timeout values
+    timeout.tv_sec = 0;          // 0 seconds
+    timeout.tv_usec = 0;      // 1000 microseconds = 1 millisecond
+
+    int max_fd = client_socket + 1;
+    int activity = select(max_fd, &readfds, NULL, NULL, &timeout);
+
+    if (activity < 0) {
+        return UDP_SELECT_ERROR;
+    } else if (activity == 0) {
+        return UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT;
+    } else {
         if (FD_ISSET(client_socket, &readfds)) {
             ret_code = recv(client_socket, data, len, 0);
+
             if (ret_code == 0) {
                 return UDP_CONNECTION_CLOSED_ERROR;
             } else if (ret_code < 0) {
@@ -116,9 +108,10 @@ int udp_nonblocking_receive(int client_socket, void *data, int len) {
                 return ret_code; // Return the number of bytes received
             }
         }
+        else {
+            return UDP_NON_UDP_DATA_IS_AVAILABLE;
+        }
     }
-
-    return ret_code;
 }
 
 bool udp_close(int *client_socket) {

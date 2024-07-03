@@ -40,6 +40,17 @@ uint32_t buf[2][1500];
 // start time for data collection timestamps
 std::chrono::time_point<std::chrono::high_resolution_clock> start_time;
 std::chrono::time_point<std::chrono::high_resolution_clock> end_time;
+std::chrono::time_point<std::chrono::high_resolution_clock> overhead;
+
+std::chrono::time_point<std::chrono::high_resolution_clock> start_overhead;
+std::chrono::time_point<std::chrono::high_resolution_clock> end_overhead;
+float overhead_time = 0;
+
+float average_transmit_time = 0;
+float average_consumer_wait_time = 0;
+double average_produce_time = 0;
+double average_producer_wait_time = 0;
+
 
 bool stop_data_collection_flag = false;
 
@@ -50,23 +61,35 @@ bool stop_data_collection_flag = false;
 // #define DRAC_NUM_MOTORS     10
 // #define DRAC_NUM_ENCODERS   7
 
+
+
 // State Machine states
 enum DataCollectionStateMachine {
-    SM_READY = 0,
-    SM_SEND_READY_STATE_TO_HOST,
     SM_WAIT_FOR_HOST_HANDSHAKE,
+    SM_SEND_DATA_COLLECTION_METADATA,
+    SM_WAIT_FOR_HOST_RECV_METADATA,
+    SM_SEND_READY_STATE_TO_HOST,
     SM_WAIT_FOR_HOST_START_CMD,
     SM_START_DATA_COLLECTION,
     SM_CHECK_FOR_STOP_DATA_COLLECTION_CMD,
     SM_START_CONSUMER_THREAD,
     SM_PACKAGE_DATA_COLLECTION_METADATA,
-    SM_SEND_DATA_COLLECTION_METADATA,
-    SM_WAIT_FOR_HOST_RECV_METADATA,
     SM_PRODUCE_DATA,
     SM_CONSUME_DATA,
     SM_CLOSE_SOCKET,
     SM_EXIT
 };
+
+const char *SM_CMD[] ={
+    "HOST: READY FOR DATA COLLECTION",
+    "",
+    "HOST: RECEIVED METADATA",
+    "ZYNQ: READY FOR DATA COLLECTION",
+    "HOST: START DATA COLLECTION",
+};
+
+
+
 
 // State Machine Return Codes
 enum StateMachineReturnCodes {
@@ -77,12 +100,13 @@ enum StateMachineReturnCodes {
 };
 
 // UDP Return Codes
-enum UDP_RETURN_CODES{
-    UDP_DATA_IS_AVAILBLE = 0,
-    UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT,
-    UDP_SELECT_ERROR,
-    UDP_CONNECTION_CLOSED_ERROR,
-    UDP_SOCKET_ERROR
+enum UDP_RETURN_CODES {
+    UDP_DATA_IS_AVAILABLE = 0,
+    UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT = -1,
+    UDP_SELECT_ERROR = -2,
+    UDP_CONNECTION_CLOSED_ERROR = -3,
+    UDP_SOCKET_ERROR = -4,
+    UDP_NON_UDP_DATA_IS_AVAILABLE = -5
 };
 
 // Socket Data struct
@@ -107,47 +131,42 @@ struct DB{
 
 
 // checks if data is available from udp buffer (for noblocking udp recv)
-static int isDataAvailable(fd_set *readfds, int client_socket){
-    struct timeval timeout;
-
-    // timeout valus
-    timeout.tv_sec = 0;
-    timeout.tv_usec = 1000;
-
-    int max_fd = client_socket + 1;
-    int activity = select(max_fd, readfds, NULL, NULL, &timeout);
-
-    if (activity < 0){
-        return UDP_SELECT_ERROR;
-    } else if (activity == 0){
-        return UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT;
-    } else {
-        return UDP_DATA_IS_AVAILBLE;
-    }
-}
-
-// nonblocking udp recv function. 
-static int udp_recvfrom_nonblocking(udp_info *client, void *buffer, size_t len){
-
+int udp_nonblocking_receive(udp_info *client, void *data, int len) {
     fd_set readfds;
     FD_ZERO(&readfds);
     FD_SET(client->socket, &readfds);
 
-    int ret_code = isDataAvailable(&readfds, client->socket) ;
+    int ret_code;
+    
+    struct timeval timeout;
 
-    if(ret_code == UDP_DATA_IS_AVAILBLE ){
+    // Timeout values
+    timeout.tv_sec = 0;          // 0 seconds
+    timeout.tv_usec = 0;      // 1000 microseconds = 1 millisecond
+
+    int max_fd = client->socket + 1;
+    int activity = select(max_fd, &readfds, NULL, NULL, &timeout);
+
+    if (activity < 0) {
+        return UDP_SELECT_ERROR;
+    } else if (activity == 0) {
+        return UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT;
+    } else {
         if (FD_ISSET(client->socket, &readfds)) {
-            ret_code = recvfrom(client->socket, buffer, len, 0, (struct sockaddr *)&client->Addr, &client->AddrLen);
-            if (ret_code == 0){
+            ret_code = recvfrom(client->socket, data, len, 0, (struct sockaddr *)&client->Addr, &client->AddrLen);
+
+            if (ret_code == 0) {
                 return UDP_CONNECTION_CLOSED_ERROR;
-            } else if (ret_code < 0){
+            } else if (ret_code < 0) {
                 return UDP_SOCKET_ERROR;
             } else {
-                return UDP_DATA_IS_AVAILBLE;
+                return ret_code; // Return the number of bytes received
             }
         }
+        else {
+            return UDP_NON_UDP_DATA_IS_AVAILABLE;
+        }
     }
-    return ret_code;
 }
 
 // udp transmit function. wrapper for sendo that abstracts the udp_info_struct
@@ -220,6 +239,11 @@ static float calculate_duration_as_float(chrono::high_resolution_clock::time_poi
     return duration.count();
 }
 
+static double calculate_duration_as_double(chrono::high_resolution_clock::time_point start, chrono::high_resolution_clock::time_point end ){
+    std::chrono::duration<double> duration = end - start;
+    return duration.count();
+}
+
 // loads data buffer for data collection
     // size of the data buffer is dependent on encoder count and motor count
     // see calculate_sizeof_sample method for data formatting
@@ -251,9 +275,15 @@ static bool load_data_buffer(BasePort *Port, AmpIO *Board, uint32_t *data_buffer
             return false;
         }
 
+        // printf("overhead time: %f\n", overhead_time);
+
         // DATA 1: timestamp
         end_time = std::chrono::high_resolution_clock::now();
-        float time_elapsed = calculate_duration_as_float(start_time,end_time);
+        overhead_time = calculate_duration_as_float(start_overhead, end_overhead);
+
+        float time_elapsed = calculate_duration_as_float(start_time, end_time);
+        
+        // float time_elapsed = calculate_duration_as_float(start_time,end_time) - overhead_time;
         data_buffer[count++] = *reinterpret_cast<uint32_t *> (&time_elapsed);
 
         // DATA 2: num of encoders and num of motors
@@ -304,25 +334,38 @@ void init_db(DB *db, AmpIO *board, udp_info * client){
 }
 
 void * consume_data(void *arg){
-        DB* db = (DB*)arg;
+    DB* db = (DB*)arg;
     int count = 0;
+
+    std::chrono::time_point<std::chrono::high_resolution_clock> start;
+    std::chrono::time_point<std::chrono::high_resolution_clock> end;
+    float transmit_time_sum = 0;
 
     // cout << "consumer starts" << endl;
 
     while (!stop_data_collection_flag) {
+
+        start = std::chrono::high_resolution_clock::now();
+
+        end = std::chrono::high_resolution_clock::now();
+
+        average_consumer_wait_time += calculate_duration_as_float(start, end);
+        
+
         if (db->prod_buf != db->cons_buf) {
+            // end = std::chrono::high_resolution_clock::now();
             db->cons_busy = 1; // Mark consumer as busy
             
+            start = std::chrono::high_resolution_clock::now();
             udp_transmit(db->client, db->double_buffer[db->cons_buf], db->dataBufferSize);
+            end = std::chrono::high_resolution_clock::now();
 
-            // if (count == 0){
-            //         for (int i = 0; i < 350; i++){
-            //             printf("dbc[%d] = %d\n", i, db->double_buffer[db->cons_buf][i]);
-            //         }
-                    
-            //     }
+            transmit_time_sum += calculate_duration_as_float(start, end);
+
 
             db->cons_busy = 0; // Mark consumer as not busy
+
+            
             
             db->cons_buf = (db->cons_buf + 1) % 2;
             // cout << "cons_buf count: " << count++ << endl;'
@@ -331,7 +374,12 @@ void * consume_data(void *arg){
 
             count++;
         }
+
+        
     }
+
+    average_consumer_wait_time = average_consumer_wait_time / (float) count;
+    average_transmit_time = transmit_time_sum / (float) count;
 
     // cout << "consumer stopped" << endl;
 
@@ -359,15 +407,16 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
 
         switch(state){
             case SM_WAIT_FOR_HOST_HANDSHAKE:{
-                ret_code = udp_recvfrom_nonblocking(client, recvBuffer, 100);
-                if (ret_code == UDP_DATA_IS_AVAILBLE){
+                ret_code = udp_nonblocking_receive(client, recvBuffer, 100);
+                if (ret_code > 0){
                     if(strcmp(recvBuffer, "HOST: READY FOR DATA COLLECTION") == 0){
                         cout << "Received Message from Host: READY FOR DATA COLLECTION" << endl;
                         state = SM_SEND_DATA_COLLECTION_METADATA;
+                        cout << "state: " << state << endl;
                         break;
                     } 
                     
-                } else if (ret_code == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT){
+                } else if (ret_code == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT || ret_code == UDP_NON_UDP_DATA_IS_AVAILABLE){
                     break;
                 } else {
                     ret_code = SM_UDP_ERROR;
@@ -380,6 +429,7 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
 
             case SM_SEND_DATA_COLLECTION_METADATA:{
                 package_meta_data(data_collection_meta, db, board);
+                cout << "package meta" << endl;
 
                 if(udp_transmit(client, data_collection_meta, sizeof(data_collection_meta)) < 1 ){
                     perror("sendto failed");
@@ -388,22 +438,33 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
                     state = SM_CLOSE_SOCKET;
                     break;
                 }
+
                 state = SM_WAIT_FOR_HOST_RECV_METADATA;
+                cout << "state: " << state << endl;
                 break;
             }
 
             case SM_WAIT_FOR_HOST_RECV_METADATA:{
-                ret_code = udp_recvfrom_nonblocking(client, recvBuffer, 100);
-                if (ret_code == UDP_DATA_IS_AVAILBLE){
+
+                ret_code = udp_nonblocking_receive(client, recvBuffer, 100);
+                // cout << "checking if meta is received " << endl;
+
+                if (ret_code > 0){
+                    // cout << "retcode: " << ret_code << endl;
                     if(strcmp(recvBuffer, "HOST: RECEIVED METADATA") == 0){
                         cout << "Received Message from Host: METADATA RECEIVED" << endl;
                         state = SM_SEND_READY_STATE_TO_HOST;
                         break;
-                    } 
-                } else if (ret_code == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT){
+                    } else {
+                        cout << "how many misses" << endl;
+                        break;
+                    }
+                } else if (ret_code == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT || ret_code == UDP_NON_UDP_DATA_IS_AVAILABLE){
+                    cout << "here i guess" << endl;
                     state = SM_SEND_DATA_COLLECTION_METADATA;
                     break;
                 } else {
+                    cout << "maybe here" << endl;
                     ret_code = SM_UDP_ERROR;
                     state = SM_CLOSE_SOCKET;
                     break;
@@ -426,34 +487,44 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
             }
 
             case SM_WAIT_FOR_HOST_START_CMD: {
+                
                 // cout << "WAIT FOR START CMDDDDD " << endl;
                 memset(recvBuffer, 0, 100);
                 // cout << "host start cmd" << endl;
-                ret_code = udp_recvfrom_nonblocking(client, recvBuffer, 100);
+                ret_code = udp_nonblocking_receive(client, recvBuffer, 100);
                 // cout << "wait for start cmd" << endl;
-                if (ret_code == UDP_DATA_IS_AVAILBLE){
+                if (ret_code > 0){
                     // cout << "recvd cmd " << recvBuffer << endl; 
                     if(strcmp(recvBuffer, "HOST: START DATA COLLECTION") == 0){
                         cout << "Received Message from Host: START DATA COLLECTION" << endl;
                         state = SM_START_DATA_COLLECTION;
                         break;
-                    } 
-                    else if (strcmp(recvBuffer, "CLIENT: Terminate Server") == 0){
+                        break;
+                    } else if (strcmp(recvBuffer, "CLIENT: Terminate Server") == 0){
                         cout << "Terminating Server.." << endl;
+                        // printf("-- TIMING ANALYSIS --\n");
+                        // printf("Average Consume-Data Time: %f\n", average_transmit_time);
+                        // printf("Average Consumer-Wait Time (waiting on producer to switch buffers: ): %f\n", average_consumer_wait_time);
+                        // printf("Average Produce-Data Time: %.9f\n", average_produce_time);
+                        // printf("Average Producer Wait Time (waiting on consumer to finish): %.9f\n", average_producer_wait_time);
+
+                        // printf("---------\n");
+
+                        // printf("Average Read Quadlet Time: %f\n", average_produce_time/ ((float) calculate_quadlets_per_packet(board->GetNumEncoders(), board->GetNumMotors())));
+                        ret_code = SM_SUCCESS;
                         state = SM_CLOSE_SOCKET;
                         break;
-                    }
-                    else {
+                    } else {
                         // TODO: need to add this invalid conidtion thing
                         // state = SM_SEND_READY_STATE_TO_HOST;
                         // while (1){
-                            cout << "recv Buffer: " << recvBuffer << endl;
-                            cout << "INVALID ENTRY" << endl;
-                            state = SM_CLOSE_SOCKET;
+                            // cout << "recv Buffer: " << recvBuffer << endl;
+                            // cout << "INVALID ENTRY" << endl;
+                            // state = SM_CLOSE_SOCKET;
                         // }
                         break;
                     }
-                } else if (ret_code == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT){
+                } else if (ret_code == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT || ret_code == UDP_NON_UDP_DATA_IS_AVAILABLE){
 
                     if (capture_count == 1){
                         state = SM_SEND_READY_STATE_TO_HOST;
@@ -478,6 +549,8 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
 
                 // set start time for data collection
                 start_time = std::chrono::high_resolution_clock::now();
+
+                count = 0;
                 state = SM_START_CONSUMER_THREAD;
                 break;
             }
@@ -508,27 +581,18 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
                 // if busy then just repeat
 
                 
-
+                // start = std::chrono::high_resolution_clock::now();
                 load_data_buffer(port, board, db->double_buffer[db->prod_buf]);
+                // end = std::chrono::high_resolution_clock::now();
 
-                
+                // average_produce_time += calculate_duration_as_double(start, end);
 
-                
 
-                // need check for if producer overruns consumer 
-                // wait for consumer to finish
-
-                // if (db->double_buffer[db->prod_buf][26] != 262148){
-                //     cout << "AYE SOMETHINGS FISHY" << endl;
-                //     cout << "data: " << db->double_buffer[db->prod_buf][26] << endl;
-                //     // cout << "prod buf count: " << count;
-
-                //     while(1){
-                        
-                //     }
-                // }
-
+                // start = std::chrono::high_resolution_clock::now();
                 while (db->cons_busy) {}
+                // end = std::chrono::high_resolution_clock::now();
+
+                // average_producer_wait_time += calculate_duration_as_double(start, end);
 
                 // Switch to the next buffer
                 db->prod_buf = (db->prod_buf + 1) % 2;
@@ -542,14 +606,13 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
             }
 
             case SM_CHECK_FOR_STOP_DATA_COLLECTION_CMD:{
+
+                start_overhead = std::chrono::high_resolution_clock::now();
                 char recv_buffer[29];
+                int ret = udp_nonblocking_receive(client, recv_buffer, 29);
                 
-                if (udp_recvfrom_nonblocking(client, recv_buffer, 29) == UDP_DATA_IS_AVAILBLE){
-
+                if (ret > 0){
                     if(strcmp(recv_buffer, "CLIENT: STOP_DATA_COLLECTION") == 0){
-
-                        count =0;
-
                         cout << "Message from Host: STOP DATA COLLECTION" << endl;
 
                         // if (count == 0){
@@ -566,17 +629,12 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
                         // while loops in the producer and consumer
                         while (db->cons_busy) {}
 
-                        // cout << "before join" << endl;
-
                         pthread_join(consumer_t, nullptr);
-                        
-                        
-                        // cout << "after join" << endl;
-
 
                         // cout << "DATA BUFFER SIZE: " << db->dataBufferSize << endl;
 
-                        // cout << "has the cons thread been joined" <<endl;
+                        // average_produce_time /= (double)count;
+                        // average_producer_wait_time /= (double)count;
 
                         capture_count++;
 
@@ -589,10 +647,18 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
                         state = SM_CLOSE_SOCKET;
                         break;
                     }
+                } else if (ret == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT || ret_code == UDP_NON_UDP_DATA_IS_AVAILABLE){
+                    end_overhead = std::chrono::high_resolution_clock::now();
+                    
+
+                    
+                    state = SM_PRODUCE_DATA;
+                    break;
+                } else {
+                    cout << "else" << endl;
                 }
                 
-                state = SM_PRODUCE_DATA;
-                break;
+                
             }
 
             case SM_CLOSE_SOCKET:{
@@ -666,6 +732,19 @@ int main(int argc, char *argv[]) {
 
     DB db;
     init_db(&db, Board, &client);
+
+    // char data[100] = {0};
+
+    // while(udp_nonblocking_receive(&client,data,sizeof(data)) != UDP_DATA_IS_AVAILBLE){
+        
+    // }
+
+    // cout << "successful recvfrom" << endl;
+
+
+
+    // char word[] = "packet";
+    // udp_transmit(&client, word, sizeof(word));
 
 
     dataCollectionStateMachine(&client, Port, Board, &db);

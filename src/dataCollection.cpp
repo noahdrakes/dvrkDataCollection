@@ -100,6 +100,32 @@ int main(int argc, char *argv[]) {
 
     int client_socket;
     bool ret;
+    // char data[100] ={0};
+    // udp_init(&client_socket, 6);
+
+    // udp_transmit(client_socket, data, sizeof(data));
+
+    // char word[] = {0};
+
+    // if (udp_nonblocking_receive(client_socket, word, 100) > 0){
+    //     printf("first word: %s\n", word);
+    // }
+
+    // memset(word, 0, sizeof(word));
+
+    // if (udp_nonblocking_receive(client_socket, word, 100) > 0){
+    //     printf("second word: %s\n", word);
+    // }
+
+    // memset(word, 0, sizeof(word));
+
+    // if (udp_nonblocking_receive(client_socket, word, 100) > 0){
+    //     printf("third word: %s\n", word);
+    // }
+
+    // close(client_socket);
+    
+    
 
     DataCollection *DC = new DataCollection();
 
@@ -110,7 +136,7 @@ int main(int argc, char *argv[]) {
     }
 
     int count = 0;
-    while(count < 5){
+    while(count < 3){
         cout << "count:  " << count << endl;
         ret = DC->start();
 
