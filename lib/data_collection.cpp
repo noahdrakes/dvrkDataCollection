@@ -291,9 +291,9 @@ bool DataCollection :: init(uint8_t boardID){
                         cout << "Hardware Version: " << dc_meta.HWVers << endl;
                         cout << "Num of Encoders:  " <<  +dc_meta.num_encoders << endl;
                         cout << "Num of Motors: " << +dc_meta.num_motors << endl;
-                        cout << "DataBuffer Size: " << dc_meta.data_buffer_size << endl;
+                        cout << "Packet Size (in bytes): " << dc_meta.data_buffer_size << endl;
                         cout << "Samples per Packet: " << dc_meta.samples_per_packet << endl;
-                        cout << "Sizoef Samples (in bytes): " << dc_meta.size_of_sample << endl;
+                        cout << "Sizoef Samples (in quadlets): " << dc_meta.size_of_sample << endl;
                         cout << "----------------------------------" << endl << endl;
                         
                         sm_state = SM_SEND_METADATA_RECV;

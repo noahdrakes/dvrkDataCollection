@@ -139,7 +139,6 @@ int main(int argc, char *argv[]) {
     
         ret = DC->start();
         printf("...Press [ENTER] to terminate capture\n");
-        usleep(1000);
 
 
         if (!ret){
