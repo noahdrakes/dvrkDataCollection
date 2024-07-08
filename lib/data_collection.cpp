@@ -17,6 +17,7 @@
 #include "data_collection.hpp"
 #include <time.h>
 #include "stdio.h"
+#include <pthread.h>
 using namespace std;
 
 ///////////////////////
@@ -147,6 +148,31 @@ bool DataCollection :: collect_data(){
 
                 // while( udp_nonblocking_receive(sock_id, data_buffer, dc_meta.data_buffer_size) > 0){}
 
+                // print out header 
+
+                myFile << "TIMESTAMP,";
+
+                for (int i = 0; i < dc_meta.num_encoders; i++){
+                    myFile << "ENCODER_POS_" << i << ",";
+                }
+
+                for (int i = 0; i < dc_meta.num_encoders; i++){
+                    myFile << "ENCODER_VEL_" << i << ",";
+                }
+
+                for (int i = 0; i < dc_meta.num_motors; i++){
+                    myFile << "MOTOR_CURRENT_" << i << ",";
+                }
+
+                for (int i = 0; i < dc_meta.num_motors; i++){
+                    myFile << "MOTOR_STATUS_" << i ;
+
+                    if (i != dc_meta.num_motors - 1){
+                        myFile << ",";
+                    }
+                }
+
+                myFile << "\n";
                             
                 while(!stop_data_collection_flag){
                     
@@ -157,7 +183,7 @@ bool DataCollection :: collect_data(){
                         
 
                             count++;
-                            printf("count: %d\n", count);
+                            // printf("count: %d\n", count);
                             for (int i = 0; i < dc_meta.data_buffer_size / 4 ; i+= dc_meta.size_of_sample){
                             
 

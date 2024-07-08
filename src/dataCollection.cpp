@@ -14,18 +14,26 @@
 #include <cstdlib>
 #include <fstream>
 #include <string>
-#include "data_collection.hpp"
+#include "../lib/data_collection.hpp"
+#include <ctype.h>
+
 
 using namespace std;
 
 static bool isInteger(const char* str) {
     // Check if the string is empty
-    if (*str == '\0') {
-        return false;
-    }
 
+    int strLength = strlen(str);
+
+    for (int i = 0; i < strLength; i++){
+        if (!isdigit(str[i])){
+            cout << "not an integer" << endl;
+            return false;
+        }
+    }
+    
     // Check if all characters in the string are digits
-    return std::all_of(str, str + strlen(str), ::isdigit);
+    return true;
 }
 
 static bool isExitKeyPressed(){
