@@ -271,9 +271,9 @@ static bool load_data_buffer(BasePort *Port, AmpIO *Board, uint32_t *data_buffer
 
         // DATA 1: timestamp
         end_time = std::chrono::high_resolution_clock::now();
-        overhead_time = calculate_duration_as_float(start_overhead, end_overhead);
+        // overhead_time = calculate_duration_as_float(start_overhead, end_overhead);
 
-        float time_elapsed = calculate_duration_as_float(start_time, end_time) - overhead_time;
+        float time_elapsed = calculate_duration_as_float(start_time, end_time);
         
         // float time_elapsed = calculate_duration_as_float(start_time,end_time) - overhead_time;
         data_buffer[count++] = *reinterpret_cast<uint32_t *> (&time_elapsed);
@@ -338,34 +338,34 @@ void * consume_data(void *arg){
 
     while (!stop_data_collection_flag) {
 
-        start = std::chrono::high_resolution_clock::now();
+        // start = std::chrono::high_resolution_clock::now();
 
-        while (db->prod_buf != db->cons_buf && !stop_data_collection_flag){}
+        // while (db->prod_buf != db->cons_buf && !stop_data_collection_flag){}
 
-        end = std::chrono::high_resolution_clock::now();
+        // end = std::chrono::high_resolution_clock::now();
 
-        average_consumer_wait_time += calculate_duration_as_float(start, end);
+        // average_consumer_wait_time += calculate_duration_as_float(start, end);
         
 
         if (db->prod_buf != db->cons_buf) {
             // end = std::chrono::high_resolution_clock::now();
             db->cons_busy = 1; // Mark consumer as busy
             
-            start = std::chrono::high_resolution_clock::now();
+            // start = std::chrono::high_resolution_clock::now();
             udp_transmit(db->client, db->double_buffer[db->cons_buf], db->dataBufferSize);
-            end = std::chrono::high_resolution_clock::now();
+            // end = std::chrono::high_resolution_clock::now();
             total_transmits++;
 
-            udp_max_transmit_wait_times.push_back(calculate_duration_as_float(start,end));
-            std::sort(udp_max_transmit_wait_times.begin(), udp_max_transmit_wait_times.end(), std::greater<float>());
+            // udp_max_transmit_wait_times.push_back(calculate_duration_as_float(start,end));
+            // std::sort(udp_max_transmit_wait_times.begin(), udp_max_transmit_wait_times.end(), std::greater<float>());
 
             
 
-            if (udp_max_transmit_wait_times.size() > 20){
-                udp_max_transmit_wait_times.pop_back();
-            }
+            // if (udp_max_transmit_wait_times.size() > 20){
+            //     udp_max_transmit_wait_times.pop_back();
+            // }
 
-            transmit_time_sum += calculate_duration_as_float(start, end);
+            // transmit_time_sum += calculate_duration_as_float(start, end);
 
 
             db->cons_busy = 0; // Mark consumer as not busy
@@ -600,18 +600,18 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
                 // if busy then just repeat
 
                 
-                auto start = std::chrono::high_resolution_clock::now();
+                // auto start = std::chrono::high_resolution_clock::now();
                 load_data_buffer(port, board, db->double_buffer[db->prod_buf]);
-                auto end = std::chrono::high_resolution_clock::now();
+                // auto end = std::chrono::high_resolution_clock::now();
 
-                average_produce_time += calculate_duration_as_double(start, end);
+                // average_produce_time += calculate_duration_as_double(start, end);
 
 
-                start = std::chrono::high_resolution_clock::now();
+                // start = std::chrono::high_resolution_clock::now();
                 while (db->cons_busy) {}
-                end = std::chrono::high_resolution_clock::now();
+                // end = std::chrono::high_resolution_clock::now();
 
-                average_producer_wait_time += calculate_duration_as_double(start, end);
+                // average_producer_wait_time += calculate_duration_as_double(start, end);
 
                 // Switch to the next buffer
                 db->prod_buf = (db->prod_buf + 1) % 2;
@@ -652,12 +652,13 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
 
                         // cout << "DATA BUFFER SIZE: " << db->dataBufferSize << endl;
 
-                        average_produce_time /= (double)count;
-                        average_producer_wait_time /= (double)count;
+                        // average_produce_time /= (double)count;
+                        // average_producer_wait_time /= (double)count;
 
                         capture_count++;
 
-                        state = SM_SEND_READY_STATE_TO_HOST;
+                        // state = SM_SEND_READY_STATE_TO_HOST;
+                        state = SM_WAIT_FOR_HOST_START_CMD;
                         break;
                     } else {
                         // something went terribly wrong

@@ -145,7 +145,7 @@ bool DataCollection :: collect_data(){
                
                 memset(data_buffer, 0, sizeof(data_buffer));
 
-                while( udp_nonblocking_receive(sock_id, data_buffer, dc_meta.data_buffer_size) > 0){}
+                // while( udp_nonblocking_receive(sock_id, data_buffer, dc_meta.data_buffer_size) > 0){}
 
                             
                 while(!stop_data_collection_flag){
@@ -157,6 +157,7 @@ bool DataCollection :: collect_data(){
                         
 
                             count++;
+                            printf("count: %d\n", count);
                             for (int i = 0; i < dc_meta.data_buffer_size / 4 ; i+= dc_meta.size_of_sample){
                             
 
@@ -409,6 +410,7 @@ bool DataCollection :: stop(){
 
 
     usleep(1000);
+    while( udp_nonblocking_receive(sock_id, data_buffer, dc_meta.data_buffer_size) > 0){}
     return true;
 }
 
