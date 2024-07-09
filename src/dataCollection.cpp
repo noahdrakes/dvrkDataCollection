@@ -21,22 +21,24 @@
 using namespace std;
 
 static bool isInteger(const char* str) {
-    // Check if the string is empty
+
+    if (str == NULL || str == ""){
+        return false;
+    }
 
     int strLength = strlen(str);
 
     for (int i = 0; i < strLength; i++){
         if (!isdigit(str[i])){
-            cout << "not an integer" << endl;
             return false;
         }
     }
     
-    // Check if all characters in the string are digits
     return true;
 }
 
 static bool isExitKeyPressed(){
+
     fd_set readfds;
     FD_ZERO(&readfds);
     FD_SET(STDIN_FILENO, &readfds); // Monitor stdin for input
@@ -65,8 +67,6 @@ int main(int argc, char *argv[]) {
     bool timedCaptureFlag = false;
     uint8_t boardID; 
 
-
-    // start "time" "boardID"
     if (argc == 3){
 
         if (!isInteger(argv[1])){
@@ -130,7 +130,6 @@ int main(int argc, char *argv[]) {
         char yn;
         cin >> yn;
 
-
         if (yn == 'y'){
             stop_data_collection = false;
         } else if (yn == 'n'){
@@ -138,7 +137,7 @@ int main(int argc, char *argv[]) {
             continue;
         } else {
             cout << "[error] Invalid character. Type either 'y' or 'n' and press enter: " << endl;
-            stop_data_collection = true;
+            stop_data_collection = false;
             continue;         
         }
 
