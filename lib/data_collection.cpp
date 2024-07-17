@@ -24,7 +24,7 @@ using namespace std;
 // PROTECTED METHODS //
 ///////////////////////
 
-static float calculate_duration_as_float(chrono::high_resolution_clock::time_point start, chrono::high_resolution_clock::time_point end ){
+static float convert_chrono_duration_to_float(chrono::high_resolution_clock::time_point start, chrono::high_resolution_clock::time_point end ){
     std::chrono::duration<float> duration = end - start;
     return duration.count();
 }
@@ -128,11 +128,6 @@ bool DataCollection :: collect_data(){
 
                 char endDataCollectionCmd[] = "CLIENT: STOP_DATA_COLLECTION";
                 uint32_t temp = 0;
-
-                // std::cout << "stop data collection flag: " << stop_data_collection_flag << endl;
-
-                
-
                 
                 time_t t = time(NULL);
                 struct tm* ptr = localtime(&t);
@@ -173,6 +168,7 @@ bool DataCollection :: collect_data(){
                 }
 
                 myFile << "\n";
+                int ret_code = 1;
                             
                 while(!stop_data_collection_flag){
                     
@@ -218,9 +214,7 @@ bool DataCollection :: collect_data(){
                             }
 
                             
-                        // }          
-
-                        // while(1){}              
+         
                     // check for udp errors
                     } 
 
@@ -240,19 +234,6 @@ bool DataCollection :: collect_data(){
             // right now the socket isn't closing at all
             // prob dependent on isDataCollectionRunningFlag
 
-            // case SM_CLOSE_SOCKET:{
-
-            //     if (!collect_data_ret){
-            //         cout << "[UDP_ERROR] - return code:  | Make sure that server application is executing on the processor! The udp connection may closed." << endl;
-            //         close(sock_id);
-            //         return collect_data_ret;
-            //     }
-
-            //     cout << "closing socket" << endl;
-            //     close(sock_id);
-            //     sm_state = SM_EXIT;
-            //     break;
-            // }
         }
     }
 
@@ -403,7 +384,7 @@ bool DataCollection :: stop(){
     
 
     curr_time.end = std::chrono::high_resolution_clock::now();
-    curr_time.elapsed = calculate_duration_as_float(curr_time.start, curr_time.end);
+    curr_time.elapsed = convert_chrono_duration_to_float(curr_time.start, curr_time.end);
 
 
     cout << "---------------------------------------------------------" << endl;
