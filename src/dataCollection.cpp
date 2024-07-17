@@ -22,7 +22,7 @@ using namespace std;
 
 static bool isInteger(const char* str) {
 
-    if (str == NULL || str == ""){
+    if (str == NULL || (strcmp(str, "") == 0)){
         return false;
     }
 

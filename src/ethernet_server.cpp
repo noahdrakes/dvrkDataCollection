@@ -42,6 +42,8 @@ uint32_t buf[2][1500];
 float prev_time = 0;
 float curr_time = 0;
 int producer_counter = 1;
+int consumer_counter = 1;
+
 
 // start time for data collection timestamps
 std::chrono::time_point<std::chrono::high_resolution_clock> start_time;
@@ -260,7 +262,10 @@ static bool load_data_buffer(BasePort *Port, AmpIO *Board, uint32_t *data_buffer
     // CAPTURE DATA 
     for (int i = 0; i < samples_per_packet; i++){
         
-        Port->ReadAllBoards();
+        if (!Port->ReadAllBoards()){
+            cout << "Read All Board Fail" << endl;
+            return false;
+        }
 
         if (!Board->ValidRead()){
             cout << "invalid read" << endl;
@@ -272,16 +277,13 @@ static bool load_data_buffer(BasePort *Port, AmpIO *Board, uint32_t *data_buffer
 
         float time_elapsed = calculate_duration_as_float(start_time, end_time);
 
-        if ((time_elapsed - prev_time) > 0.000300){
+        if ((time_elapsed - prev_time) > 0.000700){
             printf("time glitch. sample: %d\n", producer_counter);
         }
 
         prev_time = time_elapsed;
 
-        producer_counter++;
         
-
-    
         
         data_buffer[count++] = *reinterpret_cast<uint32_t *> (&time_elapsed);
 
@@ -300,13 +302,17 @@ static bool load_data_buffer(BasePort *Port, AmpIO *Board, uint32_t *data_buffer
         // DATA 4 & 5: motor current and motor status (for num_motors)
         for (int i = 0; i < num_motors; i++){
             uint32_t motor_curr = Board->GetMotorCurrent(i); 
-            if (motor_curr == (uint32_t) 16320){
-                cout << "DATA CORRUPTED "<< endl;
-            }
+
+            // if (motor_curr == (uint32_t) 16320){
+            //     cout << "DATA CORRUPTED "<< endl;
+            // }
+
             uint32_t motor_status = (Board->GetMotorStatus(i));
             data_buffer[count++] = (uint32_t)(((motor_status & 0x0000FFFF) << 16) | (motor_curr & 0x0000FFFF));
         }
     }
+
+    // producer_counter++;
     
     return true;
 
@@ -346,7 +352,9 @@ void * consume_data(void *arg){
 
             db->cons_busy = 1; 
             udp_transmit(db->client, db->double_buffer[db->cons_buf], db->dataBufferSize);
+            consumer_counter++;
             db->cons_busy = 0; // Mark consumer as not busy
+            
             
             db->cons_buf = (db->cons_buf + 1) % 2;
         }   
@@ -406,7 +414,6 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
                 }
 
                 state = SM_WAIT_FOR_HOST_RECV_METADATA;
-                // cout << "state: " << state << endl;
                 break;
             }
 
@@ -557,7 +564,11 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
 
             case SM_PRODUCE_DATA:{
                 
-                load_data_buffer(port, board, db->double_buffer[db->prod_buf]);
+                if ( !load_data_buffer(port, board, db->double_buffer[db->prod_buf])){
+                    cout << "load data buffer fail" << endl;
+                    while(1){}
+                }
+               
                 producer_counter++;
 
                 while (db->cons_busy) {}
@@ -587,6 +598,14 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
                         while (db->cons_busy) {}
 
                         pthread_join(consumer_t, nullptr);
+                        
+
+                        printf("TOTAL SAMPLE COLLECTED: %d\n", producer_counter);
+                        printf("PRODUCER COUNTER: %d\n", producer_counter);
+                        printf("CONSUMER_COUNTER: %d\n", consumer_counter);
+
+                        producer_counter = 1; 
+                        consumer_counter = 1;
 
                         // state = SM_SEND_READY_STATE_TO_HOST;
                         state = SM_WAIT_FOR_HOST_START_CMD;

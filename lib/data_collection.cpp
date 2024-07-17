@@ -76,6 +76,9 @@ void DataCollection:: process_sample(uint32_t *data_buffer, int start_idx){
     for (int i = 0; i < dc_meta.num_encoders; i++){
         proc_sample.encoder_position[i] = *reinterpret_cast<int32_t *> (&data_buffer[idx++]);
         // printf("encoder_pos[%d] = 0x%X\n",i,  proc_sample.encoder_position[i]);
+    }
+
+    for (int i = 0; i < dc_meta.num_encoders; i++){
         proc_sample.encoder_velocity[i] = *reinterpret_cast<float *> (&data_buffer[idx++]);
         // printf("encoder_velocity[%d] = %f\n", i, proc_sample.encoder_velocity[i]);
     }
@@ -176,6 +179,11 @@ bool DataCollection :: collect_data(){
                     int ret_code = udp_nonblocking_receive(sock_id, data_buffer, dc_meta.data_buffer_size);
 
                     if (ret_code > 0){
+
+                        // for (int i = 0; i < 361; i++){
+                        //     printf("data_buffer[%d]  = %d\n", i, data_buffer[i]);
+                        // }
+
                         
 
                             count++;
@@ -188,6 +196,7 @@ bool DataCollection :: collect_data(){
 
                                 for (int j = 0; j < dc_meta.num_encoders; j++){
                                     myFile << proc_sample.encoder_position[j] << ",";
+
                                 }
 
                                 for (int j = 0; j < dc_meta.num_encoders; j++){
