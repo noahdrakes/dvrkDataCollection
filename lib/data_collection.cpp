@@ -23,6 +23,7 @@ using namespace std;
 ///////////////////////
 // PROTECTED METHODS //
 ///////////////////////
+int packet_count =0;
 
 static float convert_chrono_duration_to_float(chrono::high_resolution_clock::time_point start, chrono::high_resolution_clock::time_point end ){
     std::chrono::duration<float> duration = end - start;
@@ -117,6 +118,8 @@ bool DataCollection :: collect_data(){
         switch(sm_state){
             case SM_SEND_START_DATA_COLLECTIION_CMD_TO_PS:{
 
+                
+
                 udp_transmit(sock_id, startDataCollectionCMD, 28);
 
                 sm_state = SM_START_DATA_COLLECTION;
@@ -171,15 +174,17 @@ bool DataCollection :: collect_data(){
                 }
 
                 myFile << "\n";
-                int ret_code = 1;
+                // int ret_code = 1;
+                packet_count =0;
                             
-                while(!stop_data_collection_flag){
+                while(!stop_data_collection_flag ){
                     
                     // look here maybe
                     int ret_code = udp_nonblocking_receive(sock_id, data_buffer, dc_meta.data_buffer_size);
 
                     if (ret_code > 0){
-
+                        
+                        packet_count++;
                         // for (int i = 0; i < 361; i++){
                         //     printf("data_buffer[%d]  = %d\n", i, data_buffer[i]);
                         // }
@@ -230,7 +235,6 @@ bool DataCollection :: collect_data(){
                     // TODO: NEED TO ADD AN ERROR COUNTER TO TERMINATE CLIENT WHEN NO DATA IS AVAILABLE FOR LIKE
                     // 1000 PASSES. 
                     
-                    temp = data_buffer[0]; 
                 }
 
 
@@ -385,6 +389,23 @@ bool DataCollection :: start(){
 
 bool DataCollection :: stop(){
 
+    char endDataCollectionCmd[] = "CLIENT: STOP_DATA_COLLECTION";
+
+    // send end data collection cmd
+    if( !udp_transmit(sock_id, endDataCollectionCmd, sizeof(endDataCollectionCmd)) ){
+        cout << "[ERROR]: UDP error. check connection with host!" << endl;
+    }
+
+    sleep(1);
+
+    isDataCollectionRunning = false;
+     
+    stop_data_collection_flag = true;
+
+    pthread_join(collect_data_t, nullptr);
+
+     while( udp_nonblocking_receive(sock_id, data_buffer, dc_meta.data_buffer_size) > 0){}
+
 
     myFile.close();
 
@@ -405,7 +426,7 @@ bool DataCollection :: stop(){
 
     
 
-    char endDataCollectionCmd[] = "CLIENT: STOP_DATA_COLLECTION";
+    
 
     // if (!isDataCollectionRunning){
     //     cout << "[ERROR] Data Collection is not running" << endl;
@@ -413,20 +434,15 @@ bool DataCollection :: stop(){
     // }
 
 
-    isDataCollectionRunning = false;
-     
-    stop_data_collection_flag = true;
+    
 
-    pthread_join(collect_data_t, nullptr);
-
-    // send end data collection cmd
-    if( !udp_transmit(sock_id, endDataCollectionCmd, sizeof(endDataCollectionCmd)) ){
-        cout << "[ERROR]: UDP error. check connection with host!" << endl;
-    }
+    
 
 
     usleep(1000);
-    while( udp_nonblocking_receive(sock_id, data_buffer, dc_meta.data_buffer_size) > 0){}
+   
+
+    printf("PACKET COUNT: %d\n", packet_count);
     return true;
 }
 

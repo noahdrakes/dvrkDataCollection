@@ -41,8 +41,9 @@ uint32_t buf[2][1500];
 
 float prev_time = 0;
 float curr_time = 0;
-int producer_counter = 1;
-int consumer_counter = 1;
+int producer_counter = 0;
+int consumer_counter = 0;
+int sample_count = 0;
 
 
 // start time for data collection timestamps
@@ -310,6 +311,8 @@ static bool load_data_buffer(BasePort *Port, AmpIO *Board, uint32_t *data_buffer
             uint32_t motor_status = (Board->GetMotorStatus(i));
             data_buffer[count++] = (uint32_t)(((motor_status & 0x0000FFFF) << 16) | (motor_curr & 0x0000FFFF));
         }
+
+        sample_count++;
     }
 
     // producer_counter++;
@@ -349,7 +352,10 @@ void * consume_data(void *arg){
     while (!stop_data_collection_flag) {
 
         if (db->prod_buf != db->cons_buf) {
-
+            
+            // if (stop_data_collection_flag){
+            //     return nullptr;
+            // }
             db->cons_busy = 1; 
             udp_transmit(db->client, db->double_buffer[db->cons_buf], db->dataBufferSize);
             consumer_counter++;
@@ -595,7 +601,9 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
                                                 
                         // using these conditionals just to break out of the 
                         // while loops in the producer and consumer
-                        while (db->cons_busy) {}
+
+                        // while (db->cons_busy) {}
+                        // db->cons_busy = 0;
 
                         pthread_join(consumer_t, nullptr);
                         
@@ -603,9 +611,11 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
                         printf("TOTAL SAMPLE COLLECTED: %d\n", producer_counter);
                         printf("PRODUCER COUNTER: %d\n", producer_counter);
                         printf("CONSUMER_COUNTER: %d\n", consumer_counter);
+                        printf("SAMPLE_COUNT: %d\n", sample_count);
 
-                        producer_counter = 1; 
-                        consumer_counter = 1;
+                        producer_counter = 0; 
+                        consumer_counter = 0;
+                        sample_count = 0;
 
                         // state = SM_SEND_READY_STATE_TO_HOST;
                         state = SM_WAIT_FOR_HOST_START_CMD;
