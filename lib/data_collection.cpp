@@ -85,7 +85,7 @@ void DataCollection:: process_sample(uint32_t *data_buffer, int start_idx){
     }
 
     for (int i = 0; i < dc_meta.num_motors; i++){
-        proc_sample.motor_status[i] = (uint16_t) ((0xFFFF0000 & data_buffer[idx]) >> 16);
+        proc_sample.motor_status[i] = static_cast<int16_t> ((0xFFFF0000 & data_buffer[idx]) >> 16);
         // printf("motor status[%d] = 0x%X\n", i, proc_sample.motor_status[i]);
         proc_sample.motor_current[i] = (uint16_t) (0x0000FFFF & data_buffer[idx]);
         idx++;
