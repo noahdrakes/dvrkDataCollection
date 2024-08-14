@@ -23,7 +23,7 @@ using namespace std;
 ///////////////////////
 // PROTECTED METHODS //
 ///////////////////////
-int packet_count =0;
+
 
 static float convert_chrono_duration_to_float(chrono::high_resolution_clock::time_point start, chrono::high_resolution_clock::time_point end ){
     std::chrono::duration<float> duration = end - start;
@@ -101,7 +101,7 @@ bool DataCollection :: collect_data(){
         return false;
     }
 
-    printf("CAPTURE [%d] in Progress ... ! \n", capture_count);
+    printf("CAPTURE [%d] in Progress ... ! \n", data_capture_count);
 
     isDataCollectionRunning = true;
      stop_data_collection_flag = false;
@@ -131,6 +131,8 @@ bool DataCollection :: collect_data(){
                 curr_time.start = std::chrono::high_resolution_clock::now();
                 float time_elapsed = 0; 
                 int count = 0;
+
+                udp_data_packets_recvd_count = 0;
 
                 char endDataCollectionCmd[] = "CLIENT: STOP_DATA_COLLECTION";
                 uint32_t temp = 0;
@@ -175,7 +177,7 @@ bool DataCollection :: collect_data(){
 
                 myFile << "\n";
                 // int ret_code = 1;
-                packet_count =0;
+                
                             
                 while(!stop_data_collection_flag ){
                     
@@ -184,12 +186,7 @@ bool DataCollection :: collect_data(){
 
                     if (ret_code > 0){
                         
-                        packet_count++;
-                        // for (int i = 0; i < 361; i++){
-                        //     printf("data_buffer[%d]  = %d\n", i, data_buffer[i]);
-                        // }
-
-                        
+                        udp_data_packets_recvd_count++;
 
                             count++;
                             // printf("count: %d\n", count);
@@ -418,8 +415,9 @@ bool DataCollection :: stop(){
 
 
     cout << "---------------------------------------------------------" << endl;
-    printf("STOPPED CAPTURE [%d] ! Time Elapsed: %fs\n", capture_count++, curr_time.elapsed);
+    printf("STOPPED CAPTURE [%d] ! Time Elapsed: %fs\n", data_capture_count++, curr_time.elapsed);
     cout << "Data stored to " << filename << "." << endl;
+    
     cout << "---------------------------------------------------------" << endl << endl;
 
     collect_data_ret = true;
@@ -442,7 +440,7 @@ bool DataCollection :: stop(){
     usleep(1000);
    
 
-    printf("PACKET COUNT: %d\n", packet_count);
+    
     return true;
 }
 

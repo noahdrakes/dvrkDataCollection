@@ -69,7 +69,9 @@ class DataCollection{
 
         bool isDataCollectionRunning;
 
-        int capture_count = 1;
+        int data_capture_count = 1;
+
+        int udp_data_packets_recvd_count = 0;
 
         ofstream myFile;
 

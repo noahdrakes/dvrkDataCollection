@@ -30,26 +30,27 @@ using namespace std;
 // on the MTU) in EthUdpPort.cpp
 #define UDP_MAX_PACKET_SIZE     1446
 
-// bffers for previous double buffer setup
-uint32_t buffer1[UDP_MAX_PACKET_SIZE];
-uint32_t buffer2[UDP_MAX_PACKET_SIZE];
-
 // buffer for new db setup 
     // 2d static array that we can switch between 
 uint32_t buf[2][1500];
 
-
 float prev_time = 0;
 float curr_time = 0;
+
+// DEBUGGING VARIABLES 
 int producer_counter = 0;
 int consumer_counter = 0;
 int sample_count = 0;
+vector<float> udp_max_load_databuffer_times;
 
 
 // start time for data collection timestamps
 std::chrono::time_point<std::chrono::high_resolution_clock> start_time;
 std::chrono::time_point<std::chrono::high_resolution_clock> end_time;
 std::chrono::time_point<std::chrono::high_resolution_clock> overhead;
+
+std::chrono::time_point<std::chrono::high_resolution_clock> start;
+std::chrono::time_point<std::chrono::high_resolution_clock> end_t;
 
 std::chrono::time_point<std::chrono::high_resolution_clock> start_overhead;
 std::chrono::time_point<std::chrono::high_resolution_clock> end_overhead;
@@ -61,16 +62,11 @@ double average_produce_time = 0;
 double average_producer_wait_time = 0;
 int total_transmits = 0;
 vector<float> udp_max_transmit_wait_times;
+int packet[20];
 
 
 bool stop_data_collection_flag = false;
 
-// #define QLA_NUM_MOTORS      4
-// #define QLA_NUM_ENCODERS    4
-// #define DQLA_NUM_MOTORS     8
-// #define QLA_NUM_ENCODERS    8
-// #define DRAC_NUM_MOTORS     10
-// #define DRAC_NUM_ENCODERS   7
 
 // State Machine states
 enum DataCollectionStateMachine {
@@ -109,31 +105,27 @@ enum UDP_RETURN_CODES {
 };
 
 // Socket Data struct
-struct udp_info{
+struct UDP_Info{
     int socket;
     struct sockaddr_in Addr;
     socklen_t AddrLen;
-} ; // this is global bc there will only be one
+} udp_host ; // this is global bc there will only be one
 
 
-struct DB{
+struct Double_Buffer_Info{
     uint32_t double_buffer[2][UDP_MAX_PACKET_SIZE/4]; //note: changed from 1500 which makes sense
+    uint16_t buffer_size; 
     uint8_t prod_buf;
     uint8_t cons_buf;
     atomic_uint8_t cons_busy; // TODO: change name 
-    uint16_t dataBufferSize; 
-
-    // bad design since client doesnt belong in db struct
-    // probably should make this object global
-    udp_info *client;
 };
 
 
 // checks if data is available from udp buffer (for noblocking udp recv)
-int udp_nonblocking_receive(udp_info *client, void *data, int len) {
+int udp_nonblocking_receive(UDP_Info *udp_host, void *data, int size) {
     fd_set readfds;
     FD_ZERO(&readfds);
-    FD_SET(client->socket, &readfds);
+    FD_SET(udp_host->socket, &readfds);
 
     int ret_code;
 
@@ -143,7 +135,7 @@ int udp_nonblocking_receive(udp_info *client, void *data, int len) {
     timeout.tv_sec = 0;          // 0 seconds
     timeout.tv_usec = 0;      // 1000 microseconds = 1 millisecond
 
-    int max_fd = client->socket + 1;
+    int max_fd = udp_host->socket + 1;
     int activity = select(max_fd, &readfds, NULL, NULL, &timeout);
 
     if (activity < 0) {
@@ -151,8 +143,8 @@ int udp_nonblocking_receive(udp_info *client, void *data, int len) {
     } else if (activity == 0) {
         return UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT;
     } else {
-        if (FD_ISSET(client->socket, &readfds)) {
-            ret_code = recvfrom(client->socket, data, len, 0, (struct sockaddr *)&client->Addr, &client->AddrLen);
+        if (FD_ISSET(udp_host->socket, &readfds)) {
+            ret_code = recvfrom(udp_host->socket, data, size, 0, (struct sockaddr *)&udp_host->Addr, &udp_host->AddrLen);
 
             if (ret_code == 0) {
                 return UDP_CONNECTION_CLOSED_ERROR;
@@ -168,26 +160,30 @@ int udp_nonblocking_receive(udp_info *client, void *data, int len) {
     }
 }
 
-// udp transmit function. wrapper for sendo that abstracts the udp_info_struct
-static int udp_transmit(udp_info *client, void * data, int size){
+// udp transmit function. wrapper for sendo that abstracts the UDP_Info_struct
+static int udp_transmit(UDP_Info *udp_host, void * data, int size){
     
     // change UDP_MAX_QUADLET to 
     if (size > UDP_MAX_PACKET_SIZE){
         return -1;
     }
 
-    return sendto(client->socket, data, size, 0, (struct sockaddr *)&client->Addr, client->AddrLen);
+    return sendto(udp_host->socket, data, size, 0, (struct sockaddr *)&udp_host->Addr, udp_host->AddrLen);
 }
 
 
-static int initiate_socket_connection(int *client_socket){
+static bool initiate_socket_connection(int *host_socket){
+
     cout << endl << "Initiating Socket Connection with DVRK board..." << endl;
 
+    udp_host.AddrLen = sizeof(udp_host.Addr);
+
     // Create a UDP socket
-    *client_socket = socket(AF_INET, SOCK_DGRAM, 0);
-    if (*client_socket < 0) {
-        cerr << "Failed to create socket [" << *client_socket << "]" << endl;
-        return -1;
+    *host_socket = socket(AF_INET, SOCK_DGRAM, 0);
+
+    if (*host_socket < 0) {
+        cerr << "[UDP ERROR] Failed to create socket [" << *host_socket << "]" << endl;
+        return false;
     }
 
     // Bind the socket to a specific address and port
@@ -197,100 +193,93 @@ static int initiate_socket_connection(int *client_socket){
     serverAddr.sin_port = htons(12345); // Replace with your desired port number
     serverAddr.sin_addr.s_addr = INADDR_ANY;
 
-    if (bind(*client_socket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) < 0) {
-        cerr << "Failed to bind socket" << endl;
-        close(*client_socket);
-        return -1;
+    if (bind(*host_socket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) < 0) {
+        cerr << "[UDP ERROR] Failed to bind socket" << endl;
+        close(*host_socket);
+        return false;
     }
 
-    cout << "Connection Success !" << endl << endl;
-    return 0;
+    cout << "UDP Connection Success !" << endl << endl;
+    return true;
 }
 
 // calculate the size of a sample in quadlets
-static uint16_t calculate_sizeof_sample(uint8_t num_encoders, uint8_t num_motors){
+static uint16_t calculate_quadlets_per_sample(uint8_t num_encoders, uint8_t num_motors){
     // SAMPLE STRUCTURE
 
-    // Timestamp (32 bit)                                                       [4 byte]
-    // EncoderNum and MotorNum (32 bit -> each are 16 bit)                      [4 byte] - NOT USED ANYMORE
-    // Encoder Position (32 * num of encoders)                                  [4 byte * num of encoders]
-    // Encoder Velocity Predicted (64 * num of encoders -> truncated to 32bits) [4 bytes * num of encoders]
-    // Motur Current and Motor Status (32 * num of Motors -> each are 16 bits)  [4 byte * num of motors]
+    // 1 quadlet = 4 bytes
 
-    return (1 + (1 * num_encoders) + (1 * num_encoders) + (1 * num_motors));
+    // Timestamp (32 bit)                                                       [1 quadlet]
+    // Encoder Position (32 * num of encoders)                                  [1 quadlet * num of encoders]
+    // Encoder Velocity Predicted (64 * num of encoders -> truncated to 32bits) [1 quadlet * num of encoders]
+    // Motur Current and Motor Status (32 * num of Motors -> each are 16 bits)  [1 quadlet * num of motors]
+
+    return (1 + (2*(num_encoders)) + (num_motors));
 
 }
 
-// might need some renaming 
-
 // calculates the # of samples per packet in quadlets
 static uint16_t calculate_samples_per_packet(uint8_t num_encoders, uint8_t num_motors){
-    return ((UDP_MAX_PACKET_SIZE/4)/ calculate_sizeof_sample(num_encoders, num_motors) );
+    return ((UDP_MAX_PACKET_SIZE/4)/ calculate_quadlets_per_sample(num_encoders, num_motors) );
 }
 
 // calculate # of quadlets per packet
 static uint16_t calculate_quadlets_per_packet(uint8_t num_encoders, uint8_t num_motors){
-    return (calculate_samples_per_packet(num_encoders, num_motors) * calculate_sizeof_sample(num_encoders, num_motors));
+    return (calculate_samples_per_packet(num_encoders, num_motors) * calculate_quadlets_per_sample(num_encoders, num_motors));
 }
 
 // returns the duration between start and end using the chrono
-static float calculate_duration_as_float(chrono::high_resolution_clock::time_point start, chrono::high_resolution_clock::time_point end ){
+static float convert_chrono_duration_to_float(chrono::high_resolution_clock::time_point start, chrono::high_resolution_clock::time_point end ){
     std::chrono::duration<float> duration = end - start;
     return duration.count();
 }
 
 // loads data buffer for data collection
     // size of the data buffer is dependent on encoder count and motor count
-    // see calculate_sizeof_sample method for data formatting
-static bool load_data_buffer(BasePort *Port, AmpIO *Board, uint32_t *data_buffer){
+    // see calculate_quadlets_per_sample method for data formatting
+static bool load_data_buffer(BasePort *Port, AmpIO *Board, uint32_t *data_buffer, uint8_t num_encoders, uint8_t num_motors){
 
     if(data_buffer == NULL){
-        cout << "[error] databuffer pointer is null" << endl;
+        cout << "[ERROR - load_data_buffer] databuffer pointer is null" << endl;
         return false;
     }
 
     if (sizeof(data_buffer) == 0){
-        cout << "[error] len of databuffer == 0" << endl;
+        cout << "[ERROR - load_data_buffer] len of databuffer == 0" << endl;
         return false;
     }
 
-    uint8_t num_encoders = Board->GetNumEncoders();
-    uint8_t num_motors = Board->GetNumMotors();
-    
     uint16_t samples_per_packet = calculate_samples_per_packet(num_encoders, num_motors);
     uint16_t count = 0;
 
     // CAPTURE DATA 
     for (int i = 0; i < samples_per_packet; i++){
-        
+
         if (!Port->ReadAllBoards()){
-            cout << "Read All Board Fail" << endl;
+            cout << "[ERROR in load_data_buffer] Read All Board Fail" << endl;
             return false;
         }
 
         if (!Board->ValidRead()){
-            cout << "invalid read" << endl;
+            cout << "[ERROR in load_data_buffer] invalid read for ReadAllBoards" << endl;
             return false;
         }
 
         // DATA 1: timestamp
         end_time = std::chrono::high_resolution_clock::now();
 
-        float time_elapsed = calculate_duration_as_float(start_time, end_time);
+        float time_elapsed = convert_chrono_duration_to_float(start_time, end_time);
 
         if ((time_elapsed - prev_time) > 0.000700){
-            printf("time glitch. sample: %d\n", producer_counter);
+            printf("[ERROR in load_data_buffer] time glitch. sample: %d\n", sample_count);
         }
 
         prev_time = time_elapsed;
 
-        
-        
         data_buffer[count++] = *reinterpret_cast<uint32_t *> (&time_elapsed);
 
         // DATA 2: encoder position
         for (int i = 0; i < num_encoders; i++){
-            // is ths right ????? adding the encoderMidiRange
             data_buffer[count++] = static_cast<uint32_t>(Board->GetEncoderPosition(i) + Board->GetEncoderMidRange());
         }
 
@@ -303,26 +292,20 @@ static bool load_data_buffer(BasePort *Port, AmpIO *Board, uint32_t *data_buffer
         // DATA 4 & 5: motor current and motor status (for num_motors)
         for (int i = 0; i < num_motors; i++){
             uint32_t motor_curr = Board->GetMotorCurrent(i); 
-
-            // if (motor_curr == (uint32_t) 16320){
-            //     cout << "DATA CORRUPTED "<< endl;
-            // }
-
             uint32_t motor_status = (Board->GetMotorStatus(i));
+
             data_buffer[count++] = (uint32_t)(((motor_status & 0x0000FFFF) << 16) | (motor_curr & 0x0000FFFF));
         }
 
         sample_count++;
     }
-
-    // producer_counter++;
     
     return true;
 
     
 }
 
-void package_meta_data(uint32_t *meta_data_buffer, DB *db, AmpIO *board){
+void package_meta_data(uint32_t *meta_data_buffer, Double_Buffer_Info *db, AmpIO *board){
     uint8_t num_encoders = (uint8_t) board->GetNumEncoders();
     uint8_t num_motors = (uint8_t) board->GetNumMotors();
 
@@ -331,36 +314,31 @@ void package_meta_data(uint32_t *meta_data_buffer, DB *db, AmpIO *board){
     meta_data_buffer[2] = (uint32_t) num_encoders;
     meta_data_buffer[3] = (uint32_t) num_motors;
 
-    meta_data_buffer[4] = (uint32_t) db->dataBufferSize; 
-    meta_data_buffer[5] = (uint32_t) calculate_sizeof_sample(num_encoders, num_motors);
+    meta_data_buffer[4] = (uint32_t) db->buffer_size; 
+    meta_data_buffer[5] = (uint32_t) calculate_quadlets_per_sample(num_encoders, num_motors);
     meta_data_buffer[6] = (uint32_t) calculate_samples_per_packet(num_encoders, num_motors);
 }
 
-void init_db(DB *db, AmpIO *board, udp_info * client){
+void reset_double_buffer_info(Double_Buffer_Info *db, AmpIO *board){
     db->cons_buf = 0;
     db->prod_buf = 0;
     db->cons_busy = 0;
-    db->dataBufferSize = calculate_quadlets_per_packet(board->GetNumEncoders(), board->GetNumMotors()) * 4;
-    db->client = client;
+    db->buffer_size = calculate_quadlets_per_packet(board->GetNumEncoders(), board->GetNumMotors()) * 4;
 
     memset(db->double_buffer, 0, sizeof(db->double_buffer));
 }
 
-void * consume_data(void *arg){
-    DB* db = (DB*)arg;
+void *consume_data(void *arg){
+    Double_Buffer_Info* db = (Double_Buffer_Info*)arg;
 
     while (!stop_data_collection_flag) {
 
         if (db->prod_buf != db->cons_buf) {
             
-            // if (stop_data_collection_flag){
-            //     return nullptr;
-            // }
             db->cons_busy = 1; 
-            udp_transmit(db->client, db->double_buffer[db->cons_buf], db->dataBufferSize);
+            udp_transmit(&udp_host, db->double_buffer[db->cons_buf], db->buffer_size);
             consumer_counter++;
-            db->cons_busy = 0; // Mark consumer as not busy
-            
+            db->cons_busy = 0; 
             
             db->cons_buf = (db->cons_buf + 1) % 2;
         }   
@@ -369,33 +347,43 @@ void * consume_data(void *arg){
     return nullptr;
 }
 
-static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *board, DB *db) {
+static int dataCollectionStateMachine(BasePort *port, AmpIO *board) {
+
     cout << "Starting Handshake Routine..." << endl << endl;
     cout << "Start Data Collection Client on HOST to complete handshake..." << endl;
 
-    int state = SM_WAIT_FOR_HOST_HANDSHAKE;
+    Double_Buffer_Info db;
+    reset_double_buffer_info(&db, board);
+
+    
     char recvBuffer[100] = {0};
 
     uint32_t data_collection_meta[7];
-   
+
+    uint8_t num_encoders = board->GetNumEncoders();
+    uint8_t num_motors = board->GetNumMotors();
     
-    // condition variable 
     int ret_code = 0;
 
     pthread_t consumer_t;
+
+    int state = SM_WAIT_FOR_HOST_HANDSHAKE;
 
     while(state != SM_EXIT){     
 
         switch(state){
             case SM_WAIT_FOR_HOST_HANDSHAKE:{
-                ret_code = udp_nonblocking_receive(client, recvBuffer, 100);
+
+                memset(recvBuffer, 0, 100);
+
+                ret_code = udp_nonblocking_receive(&udp_host, recvBuffer, 100);
+
                 if (ret_code > 0){
                     if(strcmp(recvBuffer, "HOST: READY FOR DATA COLLECTION") == 0){
                         cout << "Received Message from Host: READY FOR DATA COLLECTION" << endl;
                         state = SM_SEND_DATA_COLLECTION_METADATA;
                         break;
                     } 
-                    
                 } else if (ret_code == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT || ret_code == UDP_NON_UDP_DATA_IS_AVAILABLE){
                     break;
                 } else {
@@ -405,13 +393,10 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
                 }
             }
 
-            // new pair ////////////////
-
             case SM_SEND_DATA_COLLECTION_METADATA:{
-                package_meta_data(data_collection_meta, db, board);
-                // cout << "package meta" << endl;
+                package_meta_data(data_collection_meta, &db, board);
 
-                if(udp_transmit(client, data_collection_meta, sizeof(data_collection_meta)) < 1 ){
+                if(udp_transmit(&udp_host, data_collection_meta, sizeof(data_collection_meta)) < 1 ){
                     perror("sendto failed");
                     cout << "client addr is invalid." << endl;
                     ret_code = SM_UDP_ERROR;
@@ -425,8 +410,8 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
 
             case SM_WAIT_FOR_HOST_RECV_METADATA:{
 
-                ret_code = udp_nonblocking_receive(client, recvBuffer, 100);
-                // cout << "checking if meta is received " << endl;
+                memset(recvBuffer, 0, 100);
+                ret_code = udp_nonblocking_receive(&udp_host, recvBuffer, 100);
 
                 if (ret_code > 0){
                     if(strcmp(recvBuffer, "HOST: RECEIVED METADATA") == 0){
@@ -440,15 +425,11 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
                         break;
                     }
                 } else if (ret_code == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT || ret_code == UDP_NON_UDP_DATA_IS_AVAILABLE){
-                    // cout << "here i guess" << endl;
                     state = SM_WAIT_FOR_HOST_RECV_METADATA;
                     break;
                 } else {
-                    // cout << "maybe here" << endl;
                     ret_code = SM_UDP_ERROR;
                     state = SM_CLOSE_SOCKET;
-                    // state = SM_WAIT_FOR_HOST_RECV_METADATA;
-                    // break;
                 }
             }
 
@@ -457,9 +438,9 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
                 
                 char initiateDataCollection[] = "ZYNQ: READY FOR DATA COLLECTION";
 
-                if(udp_transmit(client, initiateDataCollection, strlen(initiateDataCollection)) < 1 ){
+                if(udp_transmit(&udp_host, initiateDataCollection, strlen(initiateDataCollection)) < 1 ){
                     perror("sendto failed");
-                    cout << "client addr is invalid." << endl;
+                    cout << "[ERROR UDP] client addr is invalid." << endl;
                     ret_code = SM_UDP_ERROR;
                     state = SM_CLOSE_SOCKET;
                     break;
@@ -472,17 +453,13 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
 
             case SM_WAIT_FOR_HOST_START_CMD: {
                 
-                // cout << "WAIT FOR START CMDDDDD " << endl;
                 memset(recvBuffer, 0, 100);
-                // cout << "host start cmd" << endl;
-                ret_code = udp_nonblocking_receive(client, recvBuffer, 100);
-                // cout << "wait for start cmd" << endl;
+                ret_code = udp_nonblocking_receive(&udp_host, recvBuffer, 100);
+
                 if (ret_code > 0){
-                    // cout << "recvd cmd " << recvBuffer << endl; 
                     if(strcmp(recvBuffer, "HOST: START DATA COLLECTION") == 0){
                         cout << "Received Message from Host: START DATA COLLECTION" << endl;
                         state = SM_START_DATA_COLLECTION;
-                        break;
                         break;
                     } else if (strcmp(recvBuffer, "CLIENT: Terminate Server") == 0){
                         
@@ -517,15 +494,9 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
                     }
                 } else if (ret_code == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT || ret_code == UDP_NON_UDP_DATA_IS_AVAILABLE){
 
-                    // if (capture_count == 1){
-                    //     state = SM_SEND_READY_STATE_TO_HOST;
-                    // } else if (capture_count > 1){
-                    //     state = SM_WAIT_FOR_HOST_START_CMD;
-                    // }
-
                     state = SM_WAIT_FOR_HOST_START_CMD;
-                    
                     break;
+
                 } else {
                     // UDP error
                     ret_code = SM_UDP_ERROR;
@@ -535,8 +506,6 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
             } 
 
             case SM_START_DATA_COLLECTION:{
-
-                init_db(db, board, client);
 
                 stop_data_collection_flag = false;
 
@@ -549,20 +518,12 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
 
             case SM_START_CONSUMER_THREAD:{
 
-                // pthread_t new_cons_t;
-
-                
-                
-
-                if (pthread_create(&consumer_t, nullptr, consume_data, db) != 0) {
+                if (pthread_create(&consumer_t, nullptr, consume_data, &db) != 0) {
                     std::cerr << "Error creating consumer thread" << std::endl;
                     return 1;
                 }
 
                 pthread_detach(consumer_t);
-
-                
-
 
                 state = SM_PRODUCE_DATA;
                 break;
@@ -570,17 +531,17 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
 
             case SM_PRODUCE_DATA:{
                 
-                if ( !load_data_buffer(port, board, db->double_buffer[db->prod_buf])){
-                    cout << "load data buffer fail" << endl;
-                    while(1){}
+                if ( !load_data_buffer(port, board, db.double_buffer[db.prod_buf], num_encoders, num_motors)){
+                    cout << "[ERROR]load data buffer fail" << endl;
+                    return false;
                 }
-               
+                
                 producer_counter++;
 
-                while (db->cons_busy) {}
+                while (db.cons_busy) {}
 
                 // Switch to the next buffer
-                db->prod_buf = (db->prod_buf + 1) % 2;
+                db.prod_buf = (db.prod_buf + 1) % 2;
 
                 state = SM_CHECK_FOR_STOP_DATA_COLLECTION_CMD;
                 break;
@@ -591,7 +552,7 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
 
                 start_overhead = std::chrono::high_resolution_clock::now();
                 char recv_buffer[29];
-                int ret = udp_nonblocking_receive(client, recv_buffer, 29);
+                int ret = udp_nonblocking_receive(&udp_host, recv_buffer, 29);
                 
                 if (ret > 0){
                     if(strcmp(recv_buffer, "CLIENT: STOP_DATA_COLLECTION") == 0){
@@ -647,10 +608,10 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
                 cout << endl << "Terminating Server.." << endl;
                 char terminationSuccessfulCmd[] = "Server: Termination Successful";
                 // for (int i = 0; i < 100; i++){
-                    udp_transmit(client, terminationSuccessfulCmd, 31);
+                    udp_transmit(&udp_host, terminationSuccessfulCmd, 31);
                 // }
                 
-                close(client->socket);
+                close(udp_host.socket);
                 state = SM_EXIT;
                 break;
             }
@@ -663,6 +624,10 @@ static int dataCollectionStateMachine(udp_info *client, BasePort *port, AmpIO *b
 
 
 int main() {
+
+
+
+    
 
     string portDescription = BasePort::DefaultPort();
     BasePort *Port = PortFactory(portDescription.c_str());
@@ -680,30 +645,34 @@ int main() {
     }
 
     AmpIO *Board = new AmpIO(Port->GetBoardId(0));
+    vector<AmpIO *> allBoards;
+
+    // for (unsigned int i = 0; i < Port->GetNumOfNodes(); i++){
+    //     allBoards.push_back(new AmpIO(Port->GetBoardId(i)));
+    // }
+
+    // for (unsigned int i = 0; i < Port->GetNumOfNodes(); i++){
+    //     Port->AddBoard(allBoards[i]);
+    // }
 
     Port->AddBoard(Board);
 
     // create client object and set the addLen to the sizeof of the sockaddr_in struct
-    // rename maybe udp_info
-    udp_info client;
-    client.AddrLen = sizeof(client.Addr);
+    // rename maybe UDP_Info
+
+    
 
     // initiate socket connection to port 12345
-    int ret_code = initiate_socket_connection(&client.socket);
+    bool isOK = initiate_socket_connection(&udp_host.socket);
 
-    if (ret_code!= 0){
+    cout << "here" << endl;
+    if (!isOK){
         cout << "[error] failed to establish socket connection !!" << endl;
         return -1;
     }
 
-    DB db;
-    init_db(&db, Board, &client);
+    
 
-    // char data[100] = {0};
-
-    // while(udp_nonblocking_receive(&client,data,sizeof(data)) != UDP_DATA_IS_AVAILBLE){
-        
-    // }
 
     // cout << "successful recvfrom" << endl;
 
@@ -713,9 +682,10 @@ int main() {
     // udp_transmit(&client, word, sizeof(word));
 
 
-    dataCollectionStateMachine(&client, Port, Board, &db);
+    dataCollectionStateMachine(Port, Board);
+    cout << "exiting data collection " << endl;
 
-    // Port->ReadAllBoards();
+    // Port->ReadAllBoards(); 
 
     // uint32_t data_buffer[361];
     // // load_data_buffer(Port, Board, data_buffer);
@@ -725,6 +695,17 @@ int main() {
     // for (int i = 0; i < 361; i++){
     //     printf("data_buffer[%d]  = %d\n", i, data_buffer[i]);
     // }
+
+    // Port->ReadAllBoards(); 
+
+    // for (int i = 0; i<10; i++){
+    //     printf("motor_status[%d]: %d\n", i, Board->GetMotorStatus(i));
+    // }
+
+    // for (int i = 0; i<10; i++){
+    //     printf("motor_curr[%d]: %d\n", i, Board->GetMotorStatus(i));
+    // }
+    
 
     return 0;
 }
