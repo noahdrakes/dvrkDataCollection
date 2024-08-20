@@ -393,7 +393,7 @@ bool DataCollection :: stop(){
         cout << "[ERROR]: UDP error. check connection with host!" << endl;
     }
 
-    sleep(1);
+    // sleep(1);
 
     isDataCollectionRunning = false;
      
