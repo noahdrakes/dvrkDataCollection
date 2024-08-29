@@ -45,6 +45,8 @@ std::chrono::time_point<std::chrono::high_resolution_clock> end_time;
 std::chrono::time_point<std::chrono::high_resolution_clock> start;
 std::chrono::time_point<std::chrono::high_resolution_clock> end_t;
 
+float last_timestamp;
+
 bool stop_data_collection_flag = false;
 
 
@@ -71,7 +73,6 @@ enum StateMachineReturnCodes {
     SM_SUCCESS, 
     SM_UDP_ERROR, 
     SM_BOARD_ERROR,
-    SM_FAIL
 };
 
 // UDP Return Codes
@@ -91,6 +92,7 @@ struct UDP_Info{
     socklen_t AddrLen;
 } udp_host ; // this is global bc there will only be one
 
+UDP_Info udp;
 
 struct Double_Buffer_Info{
     uint32_t double_buffer[2][UDP_MAX_PACKET_SIZE/4]; //note: changed from 1500 which makes sense
@@ -139,6 +141,7 @@ int udp_nonblocking_receive(UDP_Info *udp_host, void *data, int size) {
         }
     }
 }
+
 
 // udp transmit function. wrapper for sendo that abstracts the UDP_Info_struct
 static int udp_transmit(UDP_Info *udp_host, void * data, int size){
@@ -194,7 +197,7 @@ static uint16_t calculate_quadlets_per_sample(uint8_t num_encoders, uint8_t num_
     // Encoder Velocity Predicted (64 * num of encoders -> truncated to 32bits) [1 quadlet * num of encoders]
     // Motur Current and Motor Status (32 * num of Motors -> each are 16 bits)  [1 quadlet * num of motors]
 
-    return (1 + (2*(num_encoders)) + (num_motors));
+    return (1 + (2 * (num_encoders)) + (num_motors));
 
 }
 
@@ -252,6 +255,7 @@ static bool load_data_buffer(BasePort *Port, AmpIO *Board, uint32_t *data_buffer
         end_time = std::chrono::high_resolution_clock::now();
 
         float time_elapsed = convert_chrono_duration_to_float(start_time, end_time);
+        last_timestamp = time_elapsed;
 
         if ((time_elapsed - prev_time) > 0.000700){
             printf("[ERROR in load_data_buffer] time glitch. sample: %d\n", sample_count);
@@ -281,12 +285,9 @@ static bool load_data_buffer(BasePort *Port, AmpIO *Board, uint32_t *data_buffer
         }
 
         sample_count++;
-
     }
     
-    return true;
-
-    
+    return true;   
 }
 
 void package_meta_data(uint32_t *meta_data_buffer, Double_Buffer_Info *db, AmpIO *board){
@@ -327,7 +328,6 @@ void *consume_data(void *arg){
             db->cons_buf = (db->cons_buf + 1) % 2;
         }   
     }
-
     return nullptr;
 }
 
@@ -339,13 +339,16 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board) {
     Double_Buffer_Info db;
     reset_double_buffer_info(&db, board);
 
-    
     char recvBuffer[100] = {0};
 
     uint32_t data_collection_meta[7];
 
     uint8_t num_encoders = board->GetNumEncoders();
     uint8_t num_motors = board->GetNumMotors();
+
+    UDP_Info udp_original;
+
+    bool contact_detected = false;
     
     int ret_code = 0;
 
@@ -360,6 +363,9 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board) {
 
                 memset(recvBuffer, 0, 100);
                 ret_code = udp_nonblocking_receive(&udp_host, recvBuffer, 100);
+
+                udp_original = udp_host;
+                
 
                 if (ret_code > 0){
                     if(strcmp(recvBuffer, "HOST: READY FOR DATA COLLECTION") == 0){
@@ -473,7 +479,8 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board) {
 
                 stop_data_collection_flag = false;
 
-                // set start time for data collection
+                contact_detected = false;
+
                 start_time = std::chrono::high_resolution_clock::now();
 
                 state = SM_START_CONSUMER_THREAD;
@@ -502,12 +509,10 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board) {
 
                 while (db.cons_busy) {}
 
-                // Switch to the next buffer
                 db.prod_buf = (db.prod_buf + 1) % 2;
 
                 state = SM_CHECK_FOR_STOP_DATA_COLLECTION_CMD;
                 break;
-
             }
 
             case SM_CHECK_FOR_STOP_DATA_COLLECTION_CMD:{
@@ -534,8 +539,13 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board) {
                         state = SM_WAIT_FOR_HOST_START_CMD;
                         printf("Waiting for command from host...\n");
                         break;
+                    }else if (strcmp(recv_buffer, "contact detected") == 0){
+                        contact_detected = true;
+                        cout << "contact detected at time " << last_timestamp << endl;
+                        udp_host = udp_original;
+                        state = SM_PRODUCE_DATA;
+                        break;
                     } else {
-                        // something went terribly wrong
                         cout << "[error] unexpected UDP message. Host and Processor are out of sync" << endl;
                         ret_code = SM_UDP_ERROR;
                         state = SM_CLOSE_SOCKET;
@@ -567,8 +577,6 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board) {
     }
     return SM_SUCCESS;
 }
-
-
 
 
 int main() {
@@ -606,8 +614,6 @@ int main() {
     // for (int i = 0; i < 361; i++){
     //     printf("data_buffer[%d]  = %d\n", i, data_buffer[i]);
     // }
-
-    // Port->ReadAllBoards(); 
 
     return 0;
 }

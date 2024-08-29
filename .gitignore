@@ -4,3 +4,9 @@
 /src/CMakeFiles/
 /src/CMakeLists.txt
 src/cmake_install_cmake
+/plotting/bin/
+/plotting/lib/
+/plotting/share
+/plotting/pyvenv.cfg
+/plotting/fe_with*
+/plotting/fe_no*
