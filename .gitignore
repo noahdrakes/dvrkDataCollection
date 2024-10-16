@@ -10,3 +10,4 @@ src/cmake_install_cmake
 /plotting/pyvenv.cfg
 /plotting/fe_with*
 /plotting/fe_no*
+*.csv

@@ -118,8 +118,6 @@ bool DataCollection :: collect_data(){
         switch(sm_state){
             case SM_SEND_START_DATA_COLLECTIION_CMD_TO_PS:{
 
-                
-
                 udp_transmit(sock_id, startDataCollectionCMD, 28);
 
                 sm_state = SM_START_DATA_COLLECTION;
@@ -176,7 +174,6 @@ bool DataCollection :: collect_data(){
                 }
 
                 myFile << "\n";
-                // int ret_code = 1;
                 
                             
                 while(!stop_data_collection_flag ){
@@ -223,10 +220,6 @@ bool DataCollection :: collect_data(){
                                 memset(&proc_sample, 0, sizeof(proc_sample));
 
                             }
-
-                            
-         
-                    // check for udp errors
                     } 
 
                     // TODO: NEED TO ADD AN ERROR COUNTER TO TERMINATE CLIENT WHEN NO DATA IS AVAILABLE FOR LIKE
