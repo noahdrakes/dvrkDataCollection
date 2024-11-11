@@ -38,6 +38,16 @@ float prev_time = 0;
 int data_packet_count = 0;
 int sample_count = 0;
 
+// Motor Current/Status arrays to store data 
+// for emio timeout error
+uint16_t motor_current_LAST[10];
+uint16_t motor_status_LAST[10];
+float encoder_velocity_LAST[7];
+int32_t encoder_position_LAST[7];
+int32_t emio_read_error_counter = 0; 
+
+
+
 // start time for data collection timestamps
 std::chrono::time_point<std::chrono::high_resolution_clock> start_time;
 std::chrono::time_point<std::chrono::high_resolution_clock> end_time;
@@ -73,6 +83,7 @@ enum StateMachineReturnCodes {
     SM_SUCCESS, 
     SM_UDP_ERROR, 
     SM_BOARD_ERROR,
+    SM_FAIL
 };
 
 // UDP Return Codes
@@ -92,7 +103,6 @@ struct UDP_Info{
     socklen_t AddrLen;
 } udp_host ; // this is global bc there will only be one
 
-UDP_Info udp;
 
 struct Double_Buffer_Info{
     uint32_t double_buffer[2][UDP_MAX_PACKET_SIZE/4]; //note: changed from 1500 which makes sense
@@ -141,7 +151,6 @@ int udp_nonblocking_receive(UDP_Info *udp_host, void *data, int size) {
         }
     }
 }
-
 
 // udp transmit function. wrapper for sendo that abstracts the UDP_Info_struct
 static int udp_transmit(UDP_Info *udp_host, void * data, int size){
@@ -197,7 +206,7 @@ static uint16_t calculate_quadlets_per_sample(uint8_t num_encoders, uint8_t num_
     // Encoder Velocity Predicted (64 * num of encoders -> truncated to 32bits) [1 quadlet * num of encoders]
     // Motur Current and Motor Status (32 * num of Motors -> each are 16 bits)  [1 quadlet * num of motors]
 
-    return (1 + (2 * (num_encoders)) + (num_motors));
+    return (1 + (2*(num_encoders)) + (num_motors));
 
 }
 
@@ -222,7 +231,6 @@ static float convert_chrono_duration_to_float(chrono::high_resolution_clock::tim
     // see calculate_quadlets_per_sample method for data formatting
 static bool load_data_buffer(BasePort *Port, AmpIO *Board, uint32_t *data_buffer, uint8_t num_encoders, uint8_t num_motors){
 
-    
     if(data_buffer == NULL){
         cout << "[ERROR - load_data_buffer] databuffer pointer is null" << endl;
         return false;
@@ -233,17 +241,21 @@ static bool load_data_buffer(BasePort *Port, AmpIO *Board, uint32_t *data_buffer
         return false;
     }
 
-    
-
     uint16_t samples_per_packet = calculate_samples_per_packet(num_encoders, num_motors);
     uint16_t count = 0;
 
     // CAPTURE DATA 
     for (int i = 0; i < samples_per_packet; i++){
+        
 
-        if (!Port->ReadAllBoards()){
-            cout << "[ERROR in load_data_buffer] Read All Board Fail" << endl;
-            return false;
+
+        // if (!Port->ReadAllBoards()){
+        //     cout << "[ERROR in load_data_buffer] Read All Board Fail" << endl;
+        //     return false;
+        // }
+
+        while(!Port->ReadAllBoards()){
+            emio_read_error_counter++;
         }
 
         if (!Board->ValidRead()){
@@ -255,24 +267,36 @@ static bool load_data_buffer(BasePort *Port, AmpIO *Board, uint32_t *data_buffer
         end_time = std::chrono::high_resolution_clock::now();
 
         float time_elapsed = convert_chrono_duration_to_float(start_time, end_time);
+
         last_timestamp = time_elapsed;
-
-        if ((time_elapsed - prev_time) > 0.000700){
-            printf("[ERROR in load_data_buffer] time glitch. sample: %d\n", sample_count);
-        }
-
-        prev_time = time_elapsed;
 
         data_buffer[count++] = *reinterpret_cast<uint32_t *> (&time_elapsed);
 
         // DATA 2: encoder position
         for (int i = 0; i < num_encoders; i++){
-            data_buffer[count++] = static_cast<uint32_t>(Board->GetEncoderPosition(i) + Board->GetEncoderMidRange());
+            int32_t encoder_pos = Board->GetEncoderPosition(i);
+
+            // if ((time_elapsed - prev_time) > 0.0000800){
+            // // printf("[ERROR in load_data_buffer] time glitch. sample: %d\n", sample_count);
+            //     encoder_pos = encoder_position_LAST[i];
+            // }
+
+            // encoder_position_LAST[i] = encoder_pos;
+
+            data_buffer[count++] = static_cast<uint32_t>(encoder_pos + Board->GetEncoderMidRange());
         }
 
         // DATA 3: encoder velocity
         for (int i = 0; i < num_encoders; i++){
             float encoder_velocity_float= static_cast<float>(Board->GetEncoderVelocityPredicted(i));
+
+            // if ((time_elapsed - prev_time) > 0.0000800){
+            // // printf("[ERROR in load_data_buffer] time glitch. sample: %d\n", sample_count);
+            //     encoder_velocity_float = encoder_velocity_LAST[i];
+            // }
+
+            // encoder_velocity_LAST[i] = encoder_velocity_float;
+
             data_buffer[count++] = *reinterpret_cast<uint32_t *>(&encoder_velocity_float);
         }
 
@@ -281,13 +305,37 @@ static bool load_data_buffer(BasePort *Port, AmpIO *Board, uint32_t *data_buffer
             uint32_t motor_curr = Board->GetMotorCurrent(i); 
             uint32_t motor_status = (Board->GetMotorStatus(i));
 
+            // if ((time_elapsed - prev_time) > 0.0000800){
+            // // printf("[ERROR in load_data_buffer] time glitch. sample: %d\n", sample_count);
+            //     motor_curr = motor_current_LAST[i];
+            //     motor_status = motor_status_LAST[i];
+            // }
+
+            // motor_current_LAST[i] = motor_curr;
+            // motor_status_LAST[i] = motor_status;
+
             data_buffer[count++] = (uint32_t)(((motor_status & 0x0000FFFF) << 16) | (motor_curr & 0x0000FFFF));
         }
+
+        // if ((time_elapsed - prev_time) > 0.0000800){
+        //     // printf("[ERROR in load_data_buffer] emio read error at TIMESTAMP %f\n", time_elapsed);
+        //     emio_read_error_counter++;
+        // }
+
+        prev_time = time_elapsed;
+
+        
+
+        // for (int i = 0; i < 361; i++){
+        //     printf("data_buffer[%d]  = %d\n", i, data_buffer[i]);
+        // }
+
+        // while(1)
 
         sample_count++;
     }
     
-    return true;   
+    return true;    
 }
 
 void package_meta_data(uint32_t *meta_data_buffer, Double_Buffer_Info *db, AmpIO *board){
@@ -328,6 +376,7 @@ void *consume_data(void *arg){
             db->cons_buf = (db->cons_buf + 1) % 2;
         }   
     }
+
     return nullptr;
 }
 
@@ -339,16 +388,16 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board) {
     Double_Buffer_Info db;
     reset_double_buffer_info(&db, board);
 
+    bool contact_detected = false;
+    UDP_Info udp_original;
+
+    
     char recvBuffer[100] = {0};
 
     uint32_t data_collection_meta[7];
 
     uint8_t num_encoders = board->GetNumEncoders();
     uint8_t num_motors = board->GetNumMotors();
-
-    UDP_Info udp_original;
-
-    bool contact_detected = false;
     
     int ret_code = 0;
 
@@ -361,11 +410,12 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board) {
         switch(state){
             case SM_WAIT_FOR_HOST_HANDSHAKE:{
 
+                
+
                 memset(recvBuffer, 0, 100);
                 ret_code = udp_nonblocking_receive(&udp_host, recvBuffer, 100);
 
                 udp_original = udp_host;
-                
 
                 if (ret_code > 0){
                     if(strcmp(recvBuffer, "HOST: READY FOR DATA COLLECTION") == 0){
@@ -479,8 +529,7 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board) {
 
                 stop_data_collection_flag = false;
 
-                contact_detected = false;
-
+                // set start time for data collection
                 start_time = std::chrono::high_resolution_clock::now();
 
                 state = SM_START_CONSUMER_THREAD;
@@ -509,10 +558,12 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board) {
 
                 while (db.cons_busy) {}
 
+                // Switch to the next buffer
                 db.prod_buf = (db.prod_buf + 1) % 2;
 
                 state = SM_CHECK_FOR_STOP_DATA_COLLECTION_CMD;
                 break;
+
             }
 
             case SM_CHECK_FOR_STOP_DATA_COLLECTION_CMD:{
@@ -531,22 +582,28 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board) {
                         printf("------------------------------------------------\n");
                         printf("UDP DATA PACKETS SENT TO HOST: %d\n", data_packet_count);
                         printf("SAMPLES SENT TO HOST: %d\n", sample_count);
+                        printf("EMIO ERROR COUNT: %d", emio_read_error_counter);
                         printf("------------------------------------------------\n\n");
 
+                        emio_read_error_counter = 0; 
                         data_packet_count = 0;
                         sample_count = 0;
 
                         state = SM_WAIT_FOR_HOST_START_CMD;
                         printf("Waiting for command from host...\n");
                         break;
-                    }else if (strcmp(recv_buffer, "contact detected") == 0){
+                        
+                    } else if (strcmp(recv_buffer, "contact detected") == 0){
                         contact_detected = true;
-                        cout << "contact detected at time " << last_timestamp << endl;
+                        cout << "contact detected at time " << last_timestamp - .000034 << endl; // subtracting the time it takes to send the udp packet
                         udp_host = udp_original;
                         state = SM_PRODUCE_DATA;
                         break;
                     } else {
+                    
+                        // something went terribly wrong
                         cout << "[error] unexpected UDP message. Host and Processor are out of sync" << endl;
+                        cout << "message: " << recv_buffer << endl;
                         ret_code = SM_UDP_ERROR;
                         state = SM_CLOSE_SOCKET;
                         break;
@@ -579,6 +636,8 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board) {
 }
 
 
+
+
 int main() {
 
     string portDescription = BasePort::DefaultPort();
@@ -605,6 +664,8 @@ int main() {
         return -1;
     }
 
+    cout << "NEW MACHINE" << endl;
+
     dataCollectionStateMachine(Port, Board);
 
 
@@ -615,7 +676,8 @@ int main() {
     //     printf("data_buffer[%d]  = %d\n", i, data_buffer[i]);
     // }
 
+    // Port->ReadAllBoards(); 
+
     return 0;
 }
-
 

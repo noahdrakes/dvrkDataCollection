@@ -386,7 +386,7 @@ bool DataCollection :: stop(){
         cout << "[ERROR]: UDP error. check connection with host!" << endl;
     }
 
-    // sleep(1);
+    sleep(1);
 
     isDataCollectionRunning = false;
      
@@ -401,7 +401,6 @@ bool DataCollection :: stop(){
 
 
     // clear the udp buffer by reading until the buffer is empty
-    
 
     curr_time.end = std::chrono::high_resolution_clock::now();
     curr_time.elapsed = convert_chrono_duration_to_float(curr_time.start, curr_time.end);
@@ -423,11 +422,6 @@ bool DataCollection :: stop(){
     //     cout << "[ERROR] Data Collection is not running" << endl;
     //     return false;
     // }
-
-
-    
-
-    
 
 
     usleep(1000);
