@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
 
 # Set the project name
-project(DVRKDATACOLLECTION)
+project(dvrkDataCollection-HOST)
 
 # Specify the C++ standard
 set(CMAKE_CXX_STANDARD 11)
@@ -19,17 +19,17 @@ set(SOURCES
 )
 
 # Add the executable
-add_executable(DVRKDATACOLLECTION ${SOURCES})
+add_executable(dvrkDataCollection ${SOURCES})
 
 # Set the output directories for the executable
-set_target_properties(DVRKDATACOLLECTION PROPERTIES
+set_target_properties(dvrkDataCollection-HOST PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
     ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
     LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
 )
 
 # Example to set specific output directories for debug and release
-set_target_properties(DVRKDATACOLLECTION PROPERTIES
+set_target_properties(dvrkDataCollection-HOST PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/bin/Debug
     RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/bin/Release
 )
