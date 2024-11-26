@@ -3,3 +3,4 @@
 /zynq/build
 /host/build
 /host/CMakeFiles/
+.DS_Store
