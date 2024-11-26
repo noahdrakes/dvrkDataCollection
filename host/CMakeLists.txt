@@ -13,7 +13,7 @@ include_directories(${CMAKE_SOURCE_DIR}/lib)
 
 # Add the source files
 set(SOURCES
-    dataCollection.cpp
+    src/dataCollection.cpp
     lib/data_collection.cpp
     # src/ethernet_server.cpp
     lib/udp_tx.cpp

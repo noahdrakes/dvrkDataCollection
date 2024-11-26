@@ -169,7 +169,7 @@ endif (UNIX)
 add_subdirectory (lib)
 
 # Test programs
-add_subdirectory (tests)
+add_subdirectory (src)
 
 # Utility to flash/test board
 # add_subdirectory (programmer)
