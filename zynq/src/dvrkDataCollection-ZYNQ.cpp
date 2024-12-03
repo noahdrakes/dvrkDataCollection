@@ -18,6 +18,14 @@
 #include <atomic>
 #include <algorithm>
 
+// mmap contact detection circuit
+#include <stdio.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/mman.h>
+
 // dvrk libs
 #include "BasePort.h"
 #include "PortFactory.h"
@@ -30,9 +38,16 @@ using namespace std;
 // on the MTU) in EthUdpPort.cpp
 #define UDP_MAX_PACKET_SIZE     1446
 
-uint32_t buf[2][1500];
-
-float prev_time = 0;
+// defines and variables for MIO Memory mapping for contact detections
+#define GPIO_BASE_ADDR 0xE000A000
+#define GPIO_REGION_SIZE 0x1000
+#define GPIO_BANK1_OFFSET 0x8
+#define SCLR_CLK_BASE_ADDR 0xF8000000
+#define MIO_CONTACT_DETECTION_PIN 37 // USER DEFINES THIS HARDCODED MIO PIN # WHICH IS ROUTED FOR CONTACT DETECTIONS
+volatile uint32_t *GPIO_MEM_REGION;
+float contacted_detected_timestamp; 
+bool contact_detected_flag = false; 
+bool contact_detected_once = false;
 
 // DEBUGGING VARIABLES 
 int data_packet_count = 0;
@@ -40,10 +55,6 @@ int sample_count = 0;
 
 // Motor Current/Status arrays to store data 
 // for emio timeout error
-uint16_t motor_current_LAST[10];
-uint16_t motor_status_LAST[10];
-float encoder_velocity_LAST[7];
-int32_t encoder_position_LAST[7];
 int32_t emio_read_error_counter = 0; 
 
 
@@ -112,6 +123,75 @@ struct Double_Buffer_Info{
     atomic_uint8_t cons_busy; // TODO: change name 
 };
 
+
+int mio_mmap_init(){
+
+    int mem_fd;
+
+    // Open /dev/mem for accessing physical memory
+    if ((mem_fd = open("/dev/mem", O_RDWR | O_SYNC)) < 0) {
+        printf("Failed to open /dev/mem\n");
+        return -1;
+    }
+
+    void *gpio_mmap = mmap(
+        NULL, 
+        0x1000,
+        PROT_READ | PROT_WRITE,
+        MAP_SHARED,
+        mem_fd, 
+        GPIO_BASE_ADDR
+    );
+
+    if (gpio_mmap == MAP_FAILED) {
+        perror("Failed to mmap");
+        close(mem_fd);  // Always close the file descriptor on failure
+        return -1;
+    }
+
+    GPIO_MEM_REGION = (volatile uint32_t * ) gpio_mmap;
+
+    void *clk_map = mmap(
+        NULL, 
+        0x00000130,
+        PROT_READ | PROT_WRITE,
+        MAP_SHARED,
+        mem_fd, 
+        SCLR_CLK_BASE_ADDR
+    );
+
+    volatile unsigned long *clock_map = (volatile unsigned long *)clk_map;
+    
+    uint32_t bitmsk = (1 << 22);
+    uint32_t aper_clk_reg = clock_map[0x12C/4];
+
+    if ((aper_clk_reg & bitmsk) == 0){
+        clock_map[0x12C/4] |= bitmsk;
+    }   
+
+    munmap(clk_map, 0x00000130); 
+
+    close(mem_fd);
+
+    return 0;
+}
+
+bool isContactDetected(uint16_t MIO_PIN){
+
+    if (GPIO_MEM_REGION == NULL){
+        printf("[ERROR] MIO mmap region initialized incorrectly!\n");
+        return false;
+    }
+
+    if (MIO_PIN < 34 || MIO_PIN >37){
+        printf("Invalid MIO PIN");
+        return false;
+    }
+
+    uint32_t gpio_bank1 = GPIO_MEM_REGION[GPIO_BANK1_OFFSET/4];
+    return ((~gpio_bank1 & (1 << (MIO_PIN - 32))) >> (MIO_PIN - 32)) == 1;
+
+}
 
 // checks if data is available from udp buffer (for noblocking udp recv)
 int udp_nonblocking_receive(UDP_Info *udp_host, void *data, int size) {
@@ -244,18 +324,20 @@ static bool load_data_buffer(BasePort *Port, AmpIO *Board, uint32_t *data_buffer
     uint16_t samples_per_packet = calculate_samples_per_packet(num_encoders, num_motors);
     uint16_t count = 0;
 
+
     // CAPTURE DATA 
     for (int i = 0; i < samples_per_packet; i++){
-        
 
-
-        // if (!Port->ReadAllBoards()){
-        //     cout << "[ERROR in load_data_buffer] Read All Board Fail" << endl;
-        //     return false;
-        // }
+        if ((!contact_detected_flag) && isContactDetected(MIO_CONTACT_DETECTION_PIN)){
+            contact_detected_flag = true;
+        }
 
         while(!Port->ReadAllBoards()){
             emio_read_error_counter++;
+        }
+
+        if ((!contact_detected_flag) && isContactDetected(MIO_CONTACT_DETECTION_PIN)){
+            contact_detected_flag = true;
         }
 
         if (!Board->ValidRead()){
@@ -270,33 +352,18 @@ static bool load_data_buffer(BasePort *Port, AmpIO *Board, uint32_t *data_buffer
 
         last_timestamp = time_elapsed;
 
+
         data_buffer[count++] = *reinterpret_cast<uint32_t *> (&time_elapsed);
 
         // DATA 2: encoder position
         for (int i = 0; i < num_encoders; i++){
             int32_t encoder_pos = Board->GetEncoderPosition(i);
-
-            // if ((time_elapsed - prev_time) > 0.0000800){
-            // // printf("[ERROR in load_data_buffer] time glitch. sample: %d\n", sample_count);
-            //     encoder_pos = encoder_position_LAST[i];
-            // }
-
-            // encoder_position_LAST[i] = encoder_pos;
-
             data_buffer[count++] = static_cast<uint32_t>(encoder_pos + Board->GetEncoderMidRange());
         }
 
         // DATA 3: encoder velocity
         for (int i = 0; i < num_encoders; i++){
             float encoder_velocity_float= static_cast<float>(Board->GetEncoderVelocityPredicted(i));
-
-            // if ((time_elapsed - prev_time) > 0.0000800){
-            // // printf("[ERROR in load_data_buffer] time glitch. sample: %d\n", sample_count);
-            //     encoder_velocity_float = encoder_velocity_LAST[i];
-            // }
-
-            // encoder_velocity_LAST[i] = encoder_velocity_float;
-
             data_buffer[count++] = *reinterpret_cast<uint32_t *>(&encoder_velocity_float);
         }
 
@@ -304,33 +371,13 @@ static bool load_data_buffer(BasePort *Port, AmpIO *Board, uint32_t *data_buffer
         for (int i = 0; i < num_motors; i++){
             uint32_t motor_curr = Board->GetMotorCurrent(i); 
             uint32_t motor_status = (Board->GetMotorStatus(i));
-
-            // if ((time_elapsed - prev_time) > 0.0000800){
-            // // printf("[ERROR in load_data_buffer] time glitch. sample: %d\n", sample_count);
-            //     motor_curr = motor_current_LAST[i];
-            //     motor_status = motor_status_LAST[i];
-            // }
-
-            // motor_current_LAST[i] = motor_curr;
-            // motor_status_LAST[i] = motor_status;
-
             data_buffer[count++] = (uint32_t)(((motor_status & 0x0000FFFF) << 16) | (motor_curr & 0x0000FFFF));
         }
 
-        // if ((time_elapsed - prev_time) > 0.0000800){
-        //     // printf("[ERROR in load_data_buffer] emio read error at TIMESTAMP %f\n", time_elapsed);
-        //     emio_read_error_counter++;
-        // }
-
-        prev_time = time_elapsed;
-
-        
-
-        // for (int i = 0; i < 361; i++){
-        //     printf("data_buffer[%d]  = %d\n", i, data_buffer[i]);
-        // }
-
-        // while(1)
+        if (contact_detected_flag && (contacted_detected_timestamp == 0)){
+            contacted_detected_timestamp = last_timestamp;
+            printf("Contact Detected at %fs\n", contacted_detected_timestamp);
+        }
 
         sample_count++;
     }
@@ -385,12 +432,17 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board) {
     cout << "Starting Handshake Routine..." << endl << endl;
     cout << "Start Data Collection Client on HOST to complete handshake..." << endl;
 
+    int ret_code = 0;
+    int state = 0;
+
     Double_Buffer_Info db;
     reset_double_buffer_info(&db, board);
-
-    bool contact_detected = false;
-    UDP_Info udp_original;
-
+    
+    
+    if(mio_mmap_init() != 0){
+        state = SM_CLOSE_SOCKET;
+        ret_code = SM_FAIL;
+    }
     
     char recvBuffer[100] = {0};
 
@@ -399,23 +451,17 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board) {
     uint8_t num_encoders = board->GetNumEncoders();
     uint8_t num_motors = board->GetNumMotors();
     
-    int ret_code = 0;
-
     pthread_t consumer_t;
 
-    int state = SM_WAIT_FOR_HOST_HANDSHAKE;
+    state = SM_WAIT_FOR_HOST_HANDSHAKE;
 
     while(state != SM_EXIT){     
 
         switch(state){
             case SM_WAIT_FOR_HOST_HANDSHAKE:{
 
-                
-
                 memset(recvBuffer, 0, 100);
                 ret_code = udp_nonblocking_receive(&udp_host, recvBuffer, 100);
-
-                udp_original = udp_host;
 
                 if (ret_code > 0){
                     if(strcmp(recvBuffer, "HOST: READY FOR DATA COLLECTION") == 0){
@@ -580,6 +626,12 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board) {
                         pthread_join(consumer_t, nullptr);
                         
                         printf("------------------------------------------------\n");
+                        printf("CONTACT DETECTED: ");
+                        if (contact_detected_flag){
+                            printf("%f\n", contacted_detected_timestamp);
+                        } else {
+                            printf("NONE\n");
+                        }
                         printf("UDP DATA PACKETS SENT TO HOST: %d\n", data_packet_count);
                         printf("SAMPLES SENT TO HOST: %d\n", sample_count);
                         printf("EMIO ERROR COUNT: %d", emio_read_error_counter);
@@ -589,16 +641,13 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board) {
                         data_packet_count = 0;
                         sample_count = 0;
 
+                        contact_detected_flag = false; 
+                        contacted_detected_timestamp = 0;
+
                         state = SM_WAIT_FOR_HOST_START_CMD;
                         printf("Waiting for command from host...\n");
                         break;
                         
-                    } else if (strcmp(recv_buffer, "contact detected") == 0){
-                        contact_detected = true;
-                        cout << "contact detected at time " << last_timestamp - .000034 << endl; // subtracting the time it takes to send the udp packet
-                        udp_host = udp_original;
-                        state = SM_PRODUCE_DATA;
-                        break;
                     } else {
                     
                         // something went terribly wrong

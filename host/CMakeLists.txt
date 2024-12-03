@@ -29,12 +29,6 @@ target_link_libraries(dvrkDataCollection-HOST PRIVATE Threads::Threads)
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 
-
-
-
-
-
-
 # Set the output directories for the executable
 set_target_properties(dvrkDataCollection-HOST PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
