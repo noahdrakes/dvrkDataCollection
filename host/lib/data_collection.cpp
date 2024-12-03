@@ -39,6 +39,25 @@ static uint32_t swap_endian(uint32_t value) {
            ((value << 24) & 0xFF000000);  
 }
 
+static string return_filename(string filename){
+    time_t t = time(NULL);
+    struct tm* ptr = localtime(&t);
+
+    string date_and_time = asctime(ptr);
+    date_and_time.pop_back(); // remove newline character
+
+    filename = "capture_" + date_and_time + ".csv";
+
+    for (int i = 0; i < filename.length();i++){
+
+        if (filename[i] == ' '){
+            filename[i] = '_';
+        } 
+    }
+
+    return filename;
+}
+
 static void hwVersToString(uint32_t val, char *str){
     val = swap_endian(val);
 
@@ -114,17 +133,8 @@ bool DataCollection :: collect_data(){
                 int count = 0;
 
                 udp_data_packets_recvd_count = 0;
-
-                char endDataCollectionCmd[] = "CLIENT: STOP DATA COLLECTION";
-                uint32_t temp = 0;
                 
-                time_t t = time(NULL);
-                struct tm* ptr = localtime(&t);
-
-                string date_and_time = asctime(ptr);
-                date_and_time.pop_back(); // remove newline character
-
-                filename = "fe_data | " + date_and_time + ".csv";
+                filename = return_filename(filename);
                 myFile.open(filename);
 
                
@@ -354,10 +364,8 @@ bool DataCollection :: start(){
 
 bool DataCollection :: stop(){
 
-    char endDataCollectionCmd[] = "HOST: STOP DATA COLLECTION";
-
     // send end data collection cmd
-    if( !udp_transmit(sock_id, endDataCollectionCmd, sizeof(endDataCollectionCmd)) ){
+    if( !udp_transmit(sock_id,(char *) HOST_STOP_DATA_COLLECTION, sizeof(HOST_STOP_DATA_COLLECTION)) ){
         cout << "[ERROR]: UDP error. check connection with host!" << endl;
     }
 
