@@ -72,6 +72,8 @@ void DataCollection:: process_sample(uint32_t *data_buffer, int start_idx){
         idx++;
         
     }
+
+    proc_sample.digital_io = data_buffer[idx++];
   
 }
 
@@ -145,14 +147,10 @@ bool DataCollection :: collect_data(){
                 }
 
                 for (int i = 0; i < dc_meta.num_motors; i++){
-                    myFile << "MOTOR_STATUS_" << i ;
-
-                    if (i != dc_meta.num_motors - 1){
-                        myFile << ",";
-                    }
+                    myFile << "MOTOR_STATUS_" << i  << ",";
                 }
 
-                myFile << "\n";
+                myFile << "DIGITAL_IO" << "\n";
                 
                             
                 while(!stop_data_collection_flag ){
@@ -186,15 +184,11 @@ bool DataCollection :: collect_data(){
                                 }
 
                                 for (int j = 0; j < dc_meta.num_motors; j++){
-                                    myFile << proc_sample.motor_status[j];
+                                    myFile << proc_sample.motor_status[j] << ",";
 
-                                    if (j < (dc_meta.num_motors - 1)){
-                                        myFile << ",";
-                                    }
                                 }
 
-
-                                myFile << "\n";
+                                myFile << proc_sample.digital_io << "\n";
 
                                 memset(&proc_sample, 0, sizeof(proc_sample));
 

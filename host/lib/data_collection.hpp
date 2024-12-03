@@ -35,6 +35,7 @@ class DataCollection{
             float encoder_velocity[MAX_NUM_ENCODERS];
             uint16_t motor_current[MAX_NUM_MOTORS];
             int16_t motor_status[MAX_NUM_MOTORS];
+            uint32_t digital_io;
         }proc_sample;
 
         struct DC_Time{

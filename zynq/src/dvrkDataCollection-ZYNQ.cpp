@@ -282,8 +282,9 @@ static uint16_t calculate_quadlets_per_sample(uint8_t num_encoders, uint8_t num_
     // Encoder Position (32 * num of encoders)                                  [1 quadlet * num of encoders]
     // Encoder Velocity Predicted (64 * num of encoders -> truncated to 32bits) [1 quadlet * num of encoders]
     // Motur Current and Motor Status (32 * num of Motors -> each are 16 bits)  [1 quadlet * num of motors]
+    // Digtial IO Values                                                        [1 quadlet * digital IO]
 
-    return (1 + (2*(num_encoders)) + (num_motors));
+    return (1 + 1 + (2*(num_encoders)) + (num_motors));
 
 }
 
@@ -306,15 +307,15 @@ static float convert_chrono_duration_to_float(chrono::high_resolution_clock::tim
 // loads data buffer for data collection
     // size of the data buffer is dependent on encoder count and motor count
     // see calculate_quadlets_per_sample method for data formatting
-static bool load_data_buffer(BasePort *Port, AmpIO *Board, uint32_t *data_buffer, uint8_t num_encoders, uint8_t num_motors){
+static bool load_data_packet(BasePort *Port, AmpIO *Board, uint32_t *data_buffer, uint8_t num_encoders, uint8_t num_motors){
 
     if(data_buffer == NULL){
-        cout << "[ERROR - load_data_buffer] databuffer pointer is null" << endl;
+        cout << "[ERROR - load_data_packet] databuffer pointer is null" << endl;
         return false;
     }
 
     if (sizeof(data_buffer) == 0){
-        cout << "[ERROR - load_data_buffer] len of databuffer == 0" << endl;
+        cout << "[ERROR - load_data_packet] len of databuffer == 0" << endl;
         return false;
     }
 
@@ -338,7 +339,7 @@ static bool load_data_buffer(BasePort *Port, AmpIO *Board, uint32_t *data_buffer
         }
 
         if (!Board->ValidRead()){
-            cout << "[ERROR in load_data_buffer] invalid read for ReadAllBoards" << endl;
+            cout << "[ERROR in load_data_packet] invalid read for ReadAllBoards" << endl;
             return false;
         }
 
@@ -370,6 +371,8 @@ static bool load_data_buffer(BasePort *Port, AmpIO *Board, uint32_t *data_buffer
             uint32_t motor_status = (Board->GetMotorStatus(i));
             data_buffer[count++] = (uint32_t)(((motor_status & 0x0000FFFF) << 16) | (motor_curr & 0x0000FFFF));
         }
+
+        data_buffer[count++] = Board->ReadDigitalIO();
 
         if (contact_detected_flag && (contacted_detected_timestamp == 0)){
             contacted_detected_timestamp = last_timestamp;
@@ -591,7 +594,7 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board) {
 
             case SM_PRODUCE_DATA:{
                 
-                if ( !load_data_buffer(port, board, db.double_buffer[db.prod_buf], num_encoders, num_motors)){
+                if ( !load_data_packet(port, board, db.double_buffer[db.prod_buf], num_encoders, num_motors)){
                     cout << "[ERROR]load data buffer fail" << endl;
                     return false;
                 }
