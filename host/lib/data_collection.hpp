@@ -5,6 +5,7 @@
 #include <string>
 
 #include "udp_tx.hpp"
+#include "../../shared/data_collection_shared.h"
 
 using namespace std;
 
@@ -28,20 +29,6 @@ class DataCollection{
             SM_EXIT
         };
 
-        
-
-        struct DataColectionMeta{
-            string HWVers;
-            uint8_t num_motors;
-            uint8_t num_encoders;
-            uint16_t data_buffer_size;
-            uint16_t size_of_sample;
-            uint16_t samples_per_packet;
-        } dc_meta ;
-
-        #define MAX_NUM_ENCODERS    8
-        #define MAX_NUM_MOTORS      10
-
         struct ProcessedSample{
             float timestamp;
             int32_t encoder_position[MAX_NUM_ENCODERS];
@@ -61,6 +48,8 @@ class DataCollection{
         std::chrono::time_point<std::chrono::high_resolution_clock> end_time;
         float time_elapsed;
 
+        DataCollectionMeta dc_meta;
+        
         int sm_state;
 
         bool stop_data_collection_flag;
@@ -78,7 +67,6 @@ class DataCollection{
         string filename;
 
         int sock_id;
-        #define METADATA_MAGIC_NUMBER   0xABCDEF12
 
         uint32_t data_buffer[UDP_REAL_MTU/4] = {0};
 

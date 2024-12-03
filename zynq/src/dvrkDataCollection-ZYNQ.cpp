@@ -31,6 +31,9 @@
 #include "PortFactory.h"
 #include "EthBasePort.h"
 
+// shared header
+#include "../../shared/data_collection_shared.h"
+
 
 using namespace std;
 
@@ -89,13 +92,7 @@ enum DataCollectionStateMachine {
     SM_EXIT
 };
 
-// State Machine Return Codes
-enum StateMachineReturnCodes {
-    SM_SUCCESS, 
-    SM_UDP_ERROR, 
-    SM_BOARD_ERROR,
-    SM_FAIL
-};
+
 
 // UDP Return Codes
 enum UDP_RETURN_CODES {
@@ -385,18 +382,18 @@ static bool load_data_buffer(BasePort *Port, AmpIO *Board, uint32_t *data_buffer
     return true;    
 }
 
-void package_meta_data(uint32_t *meta_data_buffer, Double_Buffer_Info *db, AmpIO *board){
+void package_meta_data(DataCollectionMeta *dc_meta, Double_Buffer_Info *db, AmpIO *board){
     uint8_t num_encoders = (uint8_t) board->GetNumEncoders();
     uint8_t num_motors = (uint8_t) board->GetNumMotors();
 
-    meta_data_buffer[0] = 0xABCDEF12; // metadata magic word
-    meta_data_buffer[1] = board->GetHardwareVersion();
-    meta_data_buffer[2] = (uint32_t) num_encoders;
-    meta_data_buffer[3] = (uint32_t) num_motors;
+    dc_meta->magic_number = METADATA_MAGIC_NUMBER; // metadata magic word
+    dc_meta->hwvers = board->GetHardwareVersion();
+    dc_meta->num_encoders = (uint32_t) num_encoders;
+    dc_meta->num_motors = (uint32_t) num_motors;
 
-    meta_data_buffer[4] = (uint32_t) db->buffer_size; 
-    meta_data_buffer[5] = (uint32_t) calculate_quadlets_per_sample(num_encoders, num_motors);
-    meta_data_buffer[6] = (uint32_t) calculate_samples_per_packet(num_encoders, num_motors);
+    dc_meta->data_buffer_size = (uint32_t) db->buffer_size; 
+    dc_meta->size_of_sample = (uint32_t) calculate_quadlets_per_sample(num_encoders, num_motors);
+    dc_meta->samples_per_packet = (uint32_t) calculate_samples_per_packet(num_encoders, num_motors);
 }
 
 void reset_double_buffer_info(Double_Buffer_Info *db, AmpIO *board){
@@ -446,7 +443,7 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board) {
     
     char recvBuffer[100] = {0};
 
-    uint32_t data_collection_meta[7];
+    struct DataCollectionMeta data_collection_meta;
 
     uint8_t num_encoders = board->GetNumEncoders();
     uint8_t num_motors = board->GetNumMotors();
@@ -464,8 +461,8 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board) {
                 ret_code = udp_nonblocking_receive(&udp_host, recvBuffer, 100);
 
                 if (ret_code > 0){
-                    if(strcmp(recvBuffer, "HOST: READY FOR DATA COLLECTION") == 0){
-                        cout << "Received Message from Host: READY FOR DATA COLLECTION" << endl;
+                    if(strcmp(recvBuffer,  HOST_READY_CMD) == 0){
+                        cout << "Received Message - " <<  HOST_READY_CMD << endl;
                         state = SM_SEND_DATA_COLLECTION_METADATA;
                         break;
                     } 
@@ -479,9 +476,9 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board) {
             }
 
             case SM_SEND_DATA_COLLECTION_METADATA:{
-                package_meta_data(data_collection_meta, &db, board);
+                package_meta_data(&data_collection_meta, &db, board);
 
-                if(udp_transmit(&udp_host, data_collection_meta, sizeof(data_collection_meta)) < 1 ){
+                if(udp_transmit(&udp_host,  &data_collection_meta, sizeof(struct DataCollectionMeta )) < 1 ){
                     perror("udp transmit fail");
                     cout << "client addr is invalid." << endl;
                     ret_code = SM_UDP_ERROR;
@@ -499,8 +496,8 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board) {
                 ret_code = udp_nonblocking_receive(&udp_host, recvBuffer, 100);
 
                 if (ret_code > 0){
-                    if(strcmp(recvBuffer, "HOST: RECEIVED METADATA") == 0){
-                        cout << "Received Message from Host: METADATA RECEIVED" << endl;
+                    if(strcmp(recvBuffer, HOST_RECVD_METADATA) == 0){
+                        cout << "Received Message: " << HOST_RECVD_METADATA << endl;
                         cout << "Handshake Complete!" << endl;
 
                         state = SM_SEND_READY_STATE_TO_HOST;
@@ -518,12 +515,9 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board) {
                 }
             }
 
-
             case SM_SEND_READY_STATE_TO_HOST:{
-                
-                char initiateDataCollection[] = "ZYNQ: READY FOR DATA COLLECTION";
 
-                if(udp_transmit(&udp_host, initiateDataCollection, strlen(initiateDataCollection)) < 1 ){
+                if(udp_transmit(&udp_host,  (char *) ZYNQ_READY_CMD, sizeof(ZYNQ_READY_CMD)) < 1 ){
                     perror("sendto failed");
                     cout << "[ERROR UDP] client addr is invalid." << endl;
                     ret_code = SM_UDP_ERROR;
@@ -618,7 +612,7 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board) {
                 int ret = udp_nonblocking_receive(&udp_host, recv_buffer, 29);
                 
                 if (ret > 0){
-                    if(strcmp(recv_buffer, "CLIENT: STOP_DATA_COLLECTION") == 0){
+                    if(strcmp(recv_buffer, "HOST: STOP DATA COLLECTION") == 0){
                         cout << "Message from Host: STOP DATA COLLECTION" << endl;
 
                         stop_data_collection_flag = true;
@@ -670,10 +664,9 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board) {
                     cout << "[UDP_ERROR] - return code: " << ret_code << " | Make sure that server application is executing on the processor! The udp connection may closed." << endl;;
                 } 
 
-                cout << endl << "Terminating Server.." << endl;
-                char terminationSuccessfulCmd[] = "Server: Termination Successful";
+                cout << endl << ZYNQ_TERMINATATION_SUCCESSFUL << endl;
 
-                udp_transmit(&udp_host, terminationSuccessfulCmd, 31);
+                udp_transmit(&udp_host,  (void*) ZYNQ_TERMINATATION_SUCCESSFUL, 31);
                 
                 close(udp_host.socket);
                 state = SM_EXIT;
@@ -716,16 +709,6 @@ int main() {
     cout << "NEW MACHINE" << endl;
 
     dataCollectionStateMachine(Port, Board);
-
-
-    // uint32_t data_buffer[361];
-    // load_data_buffer(Port, Board, data_buffer);
-
-    // for (int i = 0; i < 361; i++){
-    //     printf("data_buffer[%d]  = %d\n", i, data_buffer[i]);
-    // }
-
-    // Port->ReadAllBoards(); 
 
     return 0;
 }

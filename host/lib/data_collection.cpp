@@ -17,7 +17,9 @@
 #include "data_collection.hpp"
 #include <time.h>
 #include "stdio.h"
+#include <cstring>
 #include <pthread.h>
+#include "../../shared/data_collection_shared.h"
 using namespace std;
 
 ///////////////////////
@@ -30,36 +32,20 @@ static float convert_chrono_duration_to_float(chrono::high_resolution_clock::tim
     return duration.count();
 }
 
+static uint32_t swap_endian(uint32_t value) {
+    return ((value >> 24) & 0x000000FF) | // Move byte 0 to byte 3
+           ((value >> 8)  & 0x0000FF00) | // Move byte 1 to byte 2
+           ((value << 8)  & 0x00FF0000) | // Move byte 2 to byte 1
+           ((value << 24) & 0xFF000000);  // Move byte 3 to byte 0
+}
 
-void DataCollection::load_meta_data(uint32_t *meta_data){
-    // store meta data into meta data struct
-    string hwVersString;
+static void hwVersToString(uint32_t val, char *str){
+    val = swap_endian(val);
 
-    switch(meta_data[1]){
-
-        case 0x514C4131:{
-            hwVersString = "QLA1";
-            break;
-        case 0x64524131:
-            hwVersString = "dRA1";
-            break;
-        case 0x44514C41:
-            hwVersString = "dQLA";
-            break;
-        default:
-            cout << "error" << endl;
-            hwVersString = "ERROR";
-            break;
-
-        }
-    };
-
-    dc_meta.HWVers = hwVersString;
-    dc_meta.num_encoders = (uint8_t) meta_data[2];
-    dc_meta.num_motors = (uint8_t) meta_data[3];
-    dc_meta.data_buffer_size = meta_data[4];
-    dc_meta.size_of_sample = meta_data[5];
-    dc_meta.samples_per_packet = meta_data[6];
+    const char *val_char =  reinterpret_cast<const char*> (&val); 
+    char hw_vers[5];
+    memcpy(str, val_char, 4);
+    str[4] = '\0';
 }
 
 void DataCollection:: process_sample(uint32_t *data_buffer, int start_idx){
@@ -71,22 +57,17 @@ void DataCollection:: process_sample(uint32_t *data_buffer, int start_idx){
     int idx = start_idx;
 
     proc_sample.timestamp = *reinterpret_cast<float *> (&data_buffer[idx++]);
-    // cout << "timestamp: " << proc_sample.timestamp << endl;
-    
 
     for (int i = 0; i < dc_meta.num_encoders; i++){
         proc_sample.encoder_position[i] = *reinterpret_cast<int32_t *> (&data_buffer[idx++]);
-        // printf("encoder_pos[%d] = 0x%X\n",i,  proc_sample.encoder_position[i]);
     }
 
     for (int i = 0; i < dc_meta.num_encoders; i++){
         proc_sample.encoder_velocity[i] = *reinterpret_cast<float *> (&data_buffer[idx++]);
-        // printf("encoder_velocity[%d] = %f\n", i, proc_sample.encoder_velocity[i]);
     }
 
     for (int i = 0; i < dc_meta.num_motors; i++){
         proc_sample.motor_status[i] = static_cast<int16_t> ((0xFFFF0000 & data_buffer[idx]) >> 16);
-        // printf("motor status[%d] = 0x%X\n", i, proc_sample.motor_status[i]);
         proc_sample.motor_current[i] = (uint16_t) (0x0000FFFF & data_buffer[idx]);
         idx++;
         
@@ -132,7 +113,7 @@ bool DataCollection :: collect_data(){
 
                 udp_data_packets_recvd_count = 0;
 
-                char endDataCollectionCmd[] = "CLIENT: STOP_DATA_COLLECTION";
+                char endDataCollectionCmd[] = "CLIENT: STOP DATA COLLECTION";
                 uint32_t temp = 0;
                 
                 time_t t = time(NULL);
@@ -146,8 +127,6 @@ bool DataCollection :: collect_data(){
 
                
                 memset(data_buffer, 0, sizeof(data_buffer));
-
-                // while( udp_nonblocking_receive(sock_id, data_buffer, dc_meta.data_buffer_size) > 0){}
 
                 // print out header 
 
@@ -279,6 +258,7 @@ bool DataCollection :: init(uint8_t boardID){
     
     char recvBuffer[100] = {0}; 
     uint32_t meta_data[7] = {0};
+
     bool error_flag = false;
     
     // Handshaking PS
@@ -291,15 +271,16 @@ bool DataCollection :: init(uint8_t boardID){
             }
 
             case SM_RECV_DATA_COLLECTION_META_DATA:{
-                ret_code = udp_nonblocking_receive(sock_id, meta_data, sizeof(meta_data));
+                ret_code = udp_nonblocking_receive(sock_id, &dc_meta, sizeof(meta_data));
                 if (ret_code > 0){
-                    if (meta_data[0] == METADATA_MAGIC_NUMBER){
+                    if (dc_meta.magic_number == METADATA_MAGIC_NUMBER){
                         cout << "Received Message from Zynq: RECEIVED METADATA" << endl << endl;
-
-                        load_meta_data(meta_data);
+                        
+                        char hw_vers[5];
+                        hwVersToString(dc_meta.hwvers, hw_vers);
 
                         cout << "---- DATA COLLECTION METADATA ---" << endl;
-                        cout << "Hardware Version: " << dc_meta.HWVers << endl;
+                        cout << "Hardware Version: " << hw_vers << endl;
                         cout << "Num of Encoders:  " <<  +dc_meta.num_encoders << endl;
                         cout << "Num of Motors: " << +dc_meta.num_motors << endl;
                         cout << "Packet Size (in bytes): " << dc_meta.data_buffer_size << endl;
@@ -379,7 +360,7 @@ bool DataCollection :: start(){
 
 bool DataCollection :: stop(){
 
-    char endDataCollectionCmd[] = "CLIENT: STOP_DATA_COLLECTION";
+    char endDataCollectionCmd[] = "HOST: STOP DATA COLLECTION";
 
     // send end data collection cmd
     if( !udp_transmit(sock_id, endDataCollectionCmd, sizeof(endDataCollectionCmd)) ){
@@ -414,19 +395,8 @@ bool DataCollection :: stop(){
 
     collect_data_ret = true;
 
-    
-
-    
-
-    // if (!isDataCollectionRunning){
-    //     cout << "[ERROR] Data Collection is not running" << endl;
-    //     return false;
-    // }
-
 
     usleep(1000);
-   
-
     
     return true;
 }
@@ -444,8 +414,8 @@ bool DataCollection :: terminate(){
         int ret = udp_nonblocking_receive(sock_id, recvBuffer, 31);
 
         if (ret > 0){
-            if(strcmp(recvBuffer, "Server: Termination Successful") == 0){
-                cout << "Terminated Data Collection Server on Zynq !" << endl;
+            if(strcmp(recvBuffer,  ZYNQ_TERMINATATION_SUCCESSFUL) == 0){
+                cout << "Received Message:  " << ZYNQ_TERMINATATION_SUCCESSFUL << endl;
                 break;
             } else {
                 // need something here

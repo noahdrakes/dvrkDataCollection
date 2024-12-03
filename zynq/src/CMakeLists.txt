@@ -12,6 +12,9 @@
 project(Amp1394Tests VERSION 2.1.0)
 
 include_directories(${Amp1394_INCLUDE_DIR})
+include_directories(${CMAKE_SOURCE_DIR}../shared)
+
+
 link_directories(${Amp1394_LIBRARY_DIR} ${Amp1394_EXTRA_LIBRARY_DIR})
 
 add_executable(dvrkDataCollection-ZYNQ dvrkDataCollection-ZYNQ.cpp)

@@ -3,17 +3,18 @@
 
 #include <chrono>
 #include <string>
+#include "../../shared/data_collection_shared.h"
 
 using namespace std;
 
-struct DataColectionMeta{
-    string HWVers;
-    uint8_t num_motors;
-    uint8_t num_encoders;
-    uint16_t data_buffer_size;
-    uint16_t size_of_sample;
-    uint16_t samples_per_packet;
-} dc_meta;
+// struct DataColectionMeta{
+//     string HWVers;
+//     uint8_t num_motors;
+//     uint8_t num_encoders;
+//     uint16_t data_buffer_size;
+//     uint16_t size_of_sample;
+//     uint16_t samples_per_packet;
+// } dc_meta;
 
 struct DC_Time{
     std::chrono::time_point<std::chrono::high_resolution_clock> start;
