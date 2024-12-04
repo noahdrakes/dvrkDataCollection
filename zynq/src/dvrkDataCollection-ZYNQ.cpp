@@ -50,7 +50,6 @@ using namespace std;
 volatile uint32_t *GPIO_MEM_REGION;
 float contacted_detected_timestamp; 
 bool contact_detected_flag = false; 
-bool contact_detected_once = false;
 
 // DEBUGGING VARIABLES 
 int data_packet_count = 0;
@@ -59,8 +58,6 @@ int sample_count = 0;
 // Motor Current/Status arrays to store data 
 // for emio timeout error
 int32_t emio_read_error_counter = 0; 
-
-
 
 // start time for data collection timestamps
 std::chrono::time_point<std::chrono::high_resolution_clock> start_time;
@@ -72,7 +69,6 @@ std::chrono::time_point<std::chrono::high_resolution_clock> end_t;
 float last_timestamp;
 
 bool stop_data_collection_flag = false;
-
 
 // State Machine states
 enum DataCollectionStateMachine {
@@ -91,8 +87,6 @@ enum DataCollectionStateMachine {
     SM_CLOSE_SOCKET,
     SM_EXIT
 };
-
-
 
 // UDP Return Codes
 enum UDP_RETURN_CODES {
@@ -121,7 +115,7 @@ struct Double_Buffer_Info{
 };
 
 
-int mio_mmap_init(){
+static int mio_mmap_init(){
 
     int mem_fd;
 
@@ -173,7 +167,7 @@ int mio_mmap_init(){
     return 0;
 }
 
-bool isContactDetected(uint16_t MIO_PIN){
+static bool isContactDetected(uint16_t MIO_PIN){
 
     if (GPIO_MEM_REGION == NULL){
         printf("[ERROR] MIO mmap region initialized incorrectly!\n");
@@ -201,8 +195,8 @@ int udp_nonblocking_receive(UDP_Info *udp_host, void *data, int size) {
     struct timeval timeout;
 
     // Timeout values
-    timeout.tv_sec = 0;          // 0 seconds
-    timeout.tv_usec = 0;      // 1000 microseconds = 1 millisecond
+    timeout.tv_sec = 0;   
+    timeout.tv_usec = 0;    
 
     int max_fd = udp_host->socket + 1;
     int activity = select(max_fd, &readfds, NULL, NULL, &timeout);
@@ -255,11 +249,10 @@ static bool initiate_socket_connection(int *host_socket){
         return false;
     }
 
-    // Bind the socket to a specific address and port
     struct sockaddr_in serverAddr;
     memset(&serverAddr, 0, sizeof(serverAddr));
     serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(12345); // Replace with your desired port number
+    serverAddr.sin_port = htons(12345); 
     serverAddr.sin_addr.s_addr = INADDR_ANY;
 
     if (bind(*host_socket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) < 0) {
@@ -307,14 +300,14 @@ static float convert_chrono_duration_to_float(chrono::high_resolution_clock::tim
 // loads data buffer for data collection
     // size of the data buffer is dependent on encoder count and motor count
     // see calculate_quadlets_per_sample method for data formatting
-static bool load_data_packet(BasePort *Port, AmpIO *Board, uint32_t *data_buffer, uint8_t num_encoders, uint8_t num_motors){
+static bool load_data_packet(BasePort *Port, AmpIO *Board, uint32_t *data_packet, uint8_t num_encoders, uint8_t num_motors){
 
-    if(data_buffer == NULL){
+    if(data_packet == NULL){
         cout << "[ERROR - load_data_packet] databuffer pointer is null" << endl;
         return false;
     }
 
-    if (sizeof(data_buffer) == 0){
+    if (sizeof(data_packet) == 0){
         cout << "[ERROR - load_data_packet] len of databuffer == 0" << endl;
         return false;
     }
@@ -351,28 +344,28 @@ static bool load_data_packet(BasePort *Port, AmpIO *Board, uint32_t *data_buffer
         last_timestamp = time_elapsed;
 
 
-        data_buffer[count++] = *reinterpret_cast<uint32_t *> (&time_elapsed);
+        data_packet[count++] = *reinterpret_cast<uint32_t *> (&time_elapsed);
 
         // DATA 2: encoder position
         for (int i = 0; i < num_encoders; i++){
             int32_t encoder_pos = Board->GetEncoderPosition(i);
-            data_buffer[count++] = static_cast<uint32_t>(encoder_pos + Board->GetEncoderMidRange());
+            data_packet[count++] = static_cast<uint32_t>(encoder_pos + Board->GetEncoderMidRange());
         }
 
         // DATA 3: encoder velocity
         for (int i = 0; i < num_encoders; i++){
             float encoder_velocity_float= static_cast<float>(Board->GetEncoderVelocityPredicted(i));
-            data_buffer[count++] = *reinterpret_cast<uint32_t *>(&encoder_velocity_float);
+            data_packet[count++] = *reinterpret_cast<uint32_t *>(&encoder_velocity_float);
         }
 
         // DATA 4 & 5: motor current and motor status (for num_motors)
         for (int i = 0; i < num_motors; i++){
             uint32_t motor_curr = Board->GetMotorCurrent(i); 
             uint32_t motor_status = (Board->GetMotorStatus(i));
-            data_buffer[count++] = (uint32_t)(((motor_status & 0x0000FFFF) << 16) | (motor_curr & 0x0000FFFF));
+            data_packet[count++] = (uint32_t)(((motor_status & 0x0000FFFF) << 16) | (motor_curr & 0x0000FFFF));
         }
 
-        data_buffer[count++] = Board->ReadDigitalIO();
+        data_packet[count++] = Board->ReadDigitalIO();
 
         if (contact_detected_flag && (contacted_detected_timestamp == 0)){
             contacted_detected_timestamp = last_timestamp;
@@ -394,7 +387,7 @@ void package_meta_data(DataCollectionMeta *dc_meta, Double_Buffer_Info *db, AmpI
     dc_meta->num_encoders = (uint32_t) num_encoders;
     dc_meta->num_motors = (uint32_t) num_motors;
 
-    dc_meta->data_buffer_size = (uint32_t) db->buffer_size; 
+    dc_meta->data_packet_size = (uint32_t) db->buffer_size; 
     dc_meta->size_of_sample = (uint32_t) calculate_quadlets_per_sample(num_encoders, num_motors);
     dc_meta->samples_per_packet = (uint32_t) calculate_samples_per_packet(num_encoders, num_motors);
 }

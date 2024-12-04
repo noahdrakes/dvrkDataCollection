@@ -17,7 +17,7 @@ struct DataCollectionMeta{
     uint32_t hwvers;
     uint32_t num_motors;
     uint32_t num_encoders;
-    uint32_t data_buffer_size;
+    uint32_t data_packet_size;
     uint32_t size_of_sample;
     uint32_t samples_per_packet;
 };
@@ -27,6 +27,9 @@ enum StateMachineReturnCodes {
     SM_SUCCESS, 
     SM_UDP_ERROR, 
     SM_BOARD_ERROR,
+    SM_ZYNQ_FAIL,
+    SM_HOST_FAIL,
+    SM_CAPTURE_TIMEOUT,
     SM_FAIL
 };
 

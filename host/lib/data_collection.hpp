@@ -71,7 +71,7 @@ class DataCollection{
 
         int sock_id;
 
-        uint32_t data_buffer[UDP_REAL_MTU/4] = {0};
+        uint32_t data_packet[UDP_REAL_MTU/4] = {0};
 
         int collect_data();
 
@@ -79,7 +79,7 @@ class DataCollection{
 
         // processes sample and uploads it to the 
         // proc sample struct
-        void process_sample(uint32_t *data_buffer, int start_idx); 
+        void process_sample(uint32_t *data_packet, int start_idx); 
 
         pthread_t collect_data_t;
     public:
