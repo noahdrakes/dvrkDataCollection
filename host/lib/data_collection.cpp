@@ -22,10 +22,10 @@
 #include "../../shared/data_collection_shared.h"
 using namespace std;
 
-///////////////////////
-// PROTECTED METHODS //
-///////////////////////
 
+///////////////////////
+// UTILITY METHODS //
+///////////////////////
 
 static float convert_chrono_duration_to_float(chrono::high_resolution_clock::time_point start, chrono::high_resolution_clock::time_point end ){
     std::chrono::duration<float> duration = end - start;
@@ -67,6 +67,11 @@ static void hwVersToString(uint32_t val, char *str){
     str[4] = '\0';
 }
 
+
+///////////////////////
+// PROTECTED METHODS //
+///////////////////////
+
 void DataCollection:: process_sample(uint32_t *data_buffer, int start_idx){
 
     if (start_idx + dc_meta.size_of_sample > UDP_MAX_QUADLET_PER_PACKET){
@@ -96,7 +101,7 @@ void DataCollection:: process_sample(uint32_t *data_buffer, int start_idx){
   
 }
 
-bool DataCollection :: collect_data(){
+int DataCollection :: collect_data(){
 
     if (isDataCollectionRunning){
         collect_data_ret = false;
@@ -136,11 +141,8 @@ bool DataCollection :: collect_data(){
                 
                 filename = return_filename(filename);
                 myFile.open(filename);
-
-               
+        
                 memset(data_buffer, 0, sizeof(data_buffer));
-
-                // print out header 
 
                 myFile << "TIMESTAMP,";
 
@@ -162,7 +164,6 @@ bool DataCollection :: collect_data(){
 
                 myFile << "DIGITAL_IO" << "\n";
                 
-                            
                 while(!stop_data_collection_flag ){
                     
                     // look here maybe
@@ -171,6 +172,7 @@ bool DataCollection :: collect_data(){
                     if (ret_code > 0){
                         
                         udp_data_packets_recvd_count++;
+                        packet_misses_counter = 0;
 
                             count++;
                             // printf("count: %d\n", count);
@@ -203,15 +205,19 @@ bool DataCollection :: collect_data(){
                                 memset(&proc_sample, 0, sizeof(proc_sample));
 
                             }
-                    } 
+                    } else if (ret_code == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT) {
+                        packet_misses_counter++;
 
-                    // TODO: NEED TO ADD AN ERROR COUNTER TO TERMINATE CLIENT WHEN NO DATA IS AVAILABLE FOR LIKE
-                    // 1000 PASSES. 
-                    
+                        if (packet_misses_counter == 100000 && udp_data_packets_recvd_count != 0){
+                            cout << "[ERROR] Capture timeout. 100,000 data packet misses" << endl;
+                            cout << "Restart Zynq and Host programs" << endl;
+                            return SM_CAPTURE_TIMEOUT;
+                        }
+                    } else {
+                        cout << "[ERROR] UDP ERROR (ret code: " << ret_code << "). Check connection with Zynq" << endl; 
+                    }                   
                 }
 
-
-                // sm_state = SM_CLOSE_SOCKET;
                 sm_state = SM_EXIT;
                 break;
             }
@@ -322,7 +328,7 @@ bool DataCollection :: init(uint8_t boardID){
                 
                 if (ret_code > 0){
                     if (strcmp(recvBuffer, "ZYNQ: READY FOR DATA COLLECTION") == 0){
-                        cout << "Received Message from Zynq: READY FOR DATA COLLECTION" << endl;
+                        cout << "Received Message " << ZYNQ_READY_CMD << endl;
                         sm_state = SM_SEND_START_DATA_COLLECTIION_CMD_TO_PS;
                         return true; 
                     } else {
@@ -369,7 +375,7 @@ bool DataCollection :: stop(){
         cout << "[ERROR]: UDP error. check connection with host!" << endl;
     }
 
-    sleep(1);
+    usleep(1000);
 
     isDataCollectionRunning = false;
      
@@ -377,7 +383,7 @@ bool DataCollection :: stop(){
 
     pthread_join(collect_data_t, nullptr);
 
-     while( udp_nonblocking_receive(sock_id, data_buffer, dc_meta.data_buffer_size) > 0){}
+    while( udp_nonblocking_receive(sock_id, data_buffer, dc_meta.data_buffer_size) > 0){}
 
 
     myFile.close();

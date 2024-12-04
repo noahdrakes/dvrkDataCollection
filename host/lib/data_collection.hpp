@@ -63,6 +63,8 @@ class DataCollection{
 
         int udp_data_packets_recvd_count = 0;
 
+        int packet_misses_counter = 0;
+
         ofstream myFile;
 
         string filename;
@@ -71,7 +73,7 @@ class DataCollection{
 
         uint32_t data_buffer[UDP_REAL_MTU/4] = {0};
 
-        bool collect_data();
+        int collect_data();
 
         void load_meta_data(uint32_t *meta_data);
 
