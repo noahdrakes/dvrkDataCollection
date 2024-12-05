@@ -111,10 +111,7 @@ int DataCollection :: collect_data(){
     printf("CAPTURE [%d] in Progress ... ! \n", data_capture_count);
 
     isDataCollectionRunning = true;
-     stop_data_collection_flag = false;
-    
-
-    char startDataCollectionCMD[] = "HOST: START DATA COLLECTION";
+    stop_data_collection_flag = false;
 
     sm_state = SM_SEND_START_DATA_COLLECTIION_CMD_TO_PS;
 
@@ -123,11 +120,10 @@ int DataCollection :: collect_data(){
         switch(sm_state){
             case SM_SEND_START_DATA_COLLECTIION_CMD_TO_PS:{
 
-                udp_transmit(sock_id, startDataCollectionCMD, 28);
+                udp_transmit(sock_id, (char *) HOST_START_DATA_COLLECTION, 28);
 
                 sm_state = SM_START_DATA_COLLECTION;
                 break;
-                
             }
 
             case SM_START_DATA_COLLECTION:{
@@ -144,19 +140,19 @@ int DataCollection :: collect_data(){
 
                 myFile << "TIMESTAMP,";
 
-                for (int i = 1; i < dc_meta.num_encoders; i++){
+                for (int i = 1; i < dc_meta.num_encoders + 1; i++){
                     myFile << "ENCODER_POS_" << i << ",";
                 }
 
-                for (int i = 1; i < dc_meta.num_encoders; i++){
+                for (int i = 1; i < dc_meta.num_encoders + 1; i++){
                     myFile << "ENCODER_VEL_" << i << ",";
                 }
 
-                for (int i = 1; i < dc_meta.num_motors; i++){
+                for (int i = 1; i < dc_meta.num_motors + 1; i++){
                     myFile << "MOTOR_CURRENT_" << i << ",";
                 }
 
-                for (int i = 1; i < dc_meta.num_motors; i++){
+                for (int i = 1; i < dc_meta.num_motors + 1; i++){
                     myFile << "MOTOR_STATUS_" << i  << ",";
                 }
 
