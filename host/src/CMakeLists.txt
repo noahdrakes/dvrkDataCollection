@@ -12,11 +12,17 @@
 # Set the project name
 project(dvrkDataCollection-HOST)
 
+# Find the data collection library
+find_package (dvrkDataCollection REQUIRED
+              HINTS "${CMAKE_BINARY_DIR}/lib")
+
+include_directories(${dvrkDataCollection_INCLUDE_DIR})
+
 # Add the executable
 add_executable(dvrkDataCollection-HOST dataCollection.cpp)
 
-link_directories("${CMAKE_BINARY_DIR}/lib")
-target_link_libraries(dvrkDataCollection-HOST PRIVATE dvrkDataCollection)
+link_directories(${dvrkDataCollection_LIBRARY_DIR})
+target_link_libraries(dvrkDataCollection-HOST PRIVATE ${dvrkDataCollection_LIBRARY})
 
 # Set the output directories for the executable
 set_target_properties(dvrkDataCollection-HOST PROPERTIES

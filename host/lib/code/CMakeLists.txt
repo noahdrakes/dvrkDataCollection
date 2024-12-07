@@ -12,15 +12,18 @@
 cmake_minimum_required(VERSION 3.10)
 
 # Set the project name
-project(dvrkDataCollection-LIB)
+project(dvrkDataCollection-LIB VERSION 0.1.0)
+
+set(LIB_INCLUDE_DIR "..")
+
+include_directories(${LIB_INCLUDE_DIR})
 
 # Add the source files
 set(SOURCES
-    ../data_collection.h
+    "${LIB_INCLUDE_DIR}/data_collection.h"
     data_collection.cpp
     udp_tx.h
-    udp_tx.cpp
-)
+    udp_tx.cpp)
 
 find_package(Threads REQUIRED)
 
@@ -38,3 +41,18 @@ set_target_properties(dvrkDataCollection PROPERTIES
     ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
     LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
 )
+
+##################### Create dvrkDataCollectionConfig.cmake #####################
+
+set (CONFIG_FILE "${CMAKE_BINARY_DIR}/lib/dvrkDataCollectionConfig.cmake")
+file (WRITE  ${CONFIG_FILE} "#\n# CMake configuration file for dvrkDataCollection library \n#\n\n")
+file (APPEND ${CONFIG_FILE} "set (dvrkDataCollection_INCLUDE_DIR \"${CMAKE_SOURCE_DIR}/lib\")\n")
+file (APPEND ${CONFIG_FILE} "set (dvrkDataCollection_LIBRARY_DIR \"${CMAKE_BINARY_DIR}/lib\")\n")
+file (APPEND ${CONFIG_FILE} "set (dvrkDataCollection_LIBRARY     \"dvrkDataCollection\")\n")
+
+include (CMakePackageConfigHelpers)
+
+write_basic_package_version_file (
+  "${CMAKE_BINARY_DIR}/lib/dvrkDataCollectionConfigVersion.cmake"
+  VERSION ${dvrkDataCollectionLib_VERSION}
+  COMPATIBILITY AnyNewerVersion)

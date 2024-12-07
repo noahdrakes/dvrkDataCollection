@@ -21,9 +21,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 # Shared header file (with Zynq)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../shared)
 
-# Local library
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/lib)
-
 # Data collection library
 add_subdirectory(lib/code)
 
