@@ -379,7 +379,7 @@ static bool load_data_packet(BasePort *Port, AmpIO *Board, uint32_t *data_packet
         // DATA 4 & 5: motor current and motor status (for num_motors)
         for (int i = 0; i < num_motors; i++) {
             uint32_t motor_curr = Board->GetMotorCurrent(i); 
-            uint32_t motor_status = (Board->GetMotorStatus(i));
+            uint32_t motor_status = Board->GetMotorStatus(i);
             data_packet[count++] = (uint32_t)(((motor_status & 0x0000FFFF) << 16) | (motor_curr & 0x0000FFFF));
         }
 

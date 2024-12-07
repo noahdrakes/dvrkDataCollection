@@ -1,9 +1,26 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*-    */
+/* ex: set filetype=cpp softtabstop=4 shiftwidth=4 tabstop=4 cindent expandtab: */
+
+/*
+  Author(s):  Noah Drakes
+
+  (C) Copyright 2024 Johns Hopkins University (JHU), All Rights Reserved.
+
+--- begin cisst license - do not edit ---
+
+This software is provided "as is" under an open source license, with
+no warranty.  The complete license can be found in license.txt and
+http://www.cisst.org/cisst/license.txt.
+
+--- end cisst license ---
+*/
+
 #ifndef __DATACOLLECTION_H__
 #define __DATACOLLECTION_H__
 
 #include <chrono>
 #include <string>
-#include "../../shared/data_collection_shared.h"
+#include "data_collection_shared.h"
 
 using namespace std;
 
@@ -16,13 +33,13 @@ using namespace std;
 //     uint16_t samples_per_packet;
 // } dc_meta;
 
-struct DC_Time{
+struct DC_Time {
     std::chrono::time_point<std::chrono::high_resolution_clock> start;
     std::chrono::time_point<std::chrono::high_resolution_clock> end;
     float elapsed;
 };
 
-class DataCollection{
+class DataCollection {
     private:
         static void * collect_data_thread(void * args);
     protected:
@@ -58,7 +75,6 @@ class DataCollection{
         bool isDataCollectionRunning;
 
         int sock_id;
-        #define METADATA_MAGIC_NUMBER   0xABCDEF12
 
         uint32_t data_buffer[UDP_REAL_MTU/4] = {0};
 
@@ -73,7 +89,5 @@ class DataCollection{
         bool start();
         bool stop();
 };
-
-
 
 #endif

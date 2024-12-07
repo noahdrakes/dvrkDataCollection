@@ -1,3 +1,20 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*-    */
+/* ex: set filetype=cpp softtabstop=4 shiftwidth=4 tabstop=4 cindent expandtab: */
+
+/*
+  Author(s):  Noah Drakes
+
+  (C) Copyright 2024 Johns Hopkins University (JHU), All Rights Reserved.
+
+--- begin cisst license - do not edit ---
+
+This software is provided "as is" under an open source license, with
+no warranty.  The complete license can be found in license.txt and
+http://www.cisst.org/cisst/license.txt.
+
+--- end cisst license ---
+*/
+
 #ifndef __DATACOLLECTIONSHARED_H__
 #define __DATACOLLECTIONSHARED_H__
 
@@ -12,7 +29,7 @@ using namespace std;
 
 const uint32_t METADATA_MAGIC_NUMBER = 0xABCDEF12;
 
-struct DataCollectionMeta{
+struct DataCollectionMeta {
     uint32_t magic_number;
     uint32_t hwvers;
     uint32_t num_motors;

@@ -1,3 +1,20 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*-    */
+/* ex: set filetype=cpp softtabstop=4 shiftwidth=4 tabstop=4 cindent expandtab: */
+
+/*
+  Author(s):  Noah Drakes
+
+  (C) Copyright 2024 Johns Hopkins University (JHU), All Rights Reserved.
+
+--- begin cisst license - do not edit ---
+
+This software is provided "as is" under an open source license, with
+no warranty.  The complete license can be found in license.txt and
+http://www.cisst.org/cisst/license.txt.
+
+--- end cisst license ---
+*/
+
 #include <stdint.h>
 #include <stdio.h>
 #include <iostream>
@@ -20,7 +37,8 @@ using namespace std;
 // Return codes for non-blocking UDP receive
 
 
-bool udp_init(int *client_socket, uint8_t boardId) {
+bool udp_init(int *client_socket, uint8_t boardId)
+{
     int ret;
     char ipAddress[14] = "169.254.10.";
 
@@ -53,30 +71,24 @@ bool udp_init(int *client_socket, uint8_t boardId) {
     return true;
 }
 
-bool udp_transmit(int client_socket, void *data, int size) {
+bool udp_transmit(int client_socket, void *data, int size)
+{
     if (size > UDP_REAL_MTU) {
         return false;
     }
 
-    if (send(client_socket, data, size, 0) >= 0) {
-        return true;
-    } else {
-        return false;
-    }
+    return (send(client_socket, data, size, 0) >= 0);
 }
 
-bool udp_receive(int client_socket, void *data, int len) {
+bool udp_receive(int client_socket, void *data, int len)
+{
     uint16_t received_bytes = recv(client_socket, data, len, 0);
 
-    if (received_bytes > 0) {
-        return true;
-    } else {
-        return false;
-    }
+    return (received_bytes > 0);
 }
 
-
-int udp_nonblocking_receive(int client_socket, void *data, int len) {
+int udp_nonblocking_receive(int client_socket, void *data, int len)
+{
     fd_set readfds;
     FD_ZERO(&readfds);
     FD_SET(client_socket, &readfds);
@@ -114,7 +126,8 @@ int udp_nonblocking_receive(int client_socket, void *data, int len) {
     }
 }
 
-bool udp_close(int *client_socket) {
+bool udp_close(int *client_socket)
+{
     close(*client_socket);
     return true;
 }
