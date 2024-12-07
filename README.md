@@ -23,7 +23,7 @@ The executable running on the host is compiled using cmake in the `host` directo
 The second executable is meant to run on the Zynq processor. There is a precompiled program stored in releases on github called **`dvrkDataCollection-ZYNQ`**. This program is good to run as is. The source code for this tool is also provided in the `zynq` directory in case someone wants to edit the original program and compile the program for the Zynq using a toolchain file that can be generated using [Mechatronics Embedded](https://github.com/jhu-cisst/mechatronics-embedded.git) repo and generating the build tree by setting the toolchain file for cross compilation using:
 `cmake -DCMAKE_TOOLCHAIN_FILE=path/to/toolchain_clang_fpgav3.cmake <path/to/src>`.
 
-### Running
+## Running
 
 - Connect an ethernet cable to either ethernet port on the FPGA.
 
@@ -55,7 +55,7 @@ where N is the Board ID and the exectubale will appear in ~/media/targetDir/.
 
 The host program output will guide you on how to collect data.
 
-### Output
+## Output
 
 The program will output a csv file for each capture containing the following data for each axis:
 
