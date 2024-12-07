@@ -24,7 +24,6 @@ http://www.cisst.org/cisst/license.txt.
 #include <stdio.h>
 #include <cstdlib>
 #include <getopt.h>
-#include "udp_tx.hpp"
 #include <sys/select.h>
 #include <chrono>
 #include <ctime>
@@ -32,8 +31,11 @@ http://www.cisst.org/cisst/license.txt.
 #include <string>
 #include <time.h>
 #include <pthread.h>
-#include "data_collection.hpp"
+
+#include "udp_tx.h"
+#include "data_collection.h"
 #include "data_collection_shared.h"
+
 using namespace std;
 
 // Byteswap (bswap_32)

@@ -28,7 +28,7 @@ http://www.cisst.org/cisst/license.txt.
 #include <cstdlib>
 #include <atomic>
 
-#include "udp_tx.hpp"
+#include "udp_tx.h"
 
 using namespace std; 
 

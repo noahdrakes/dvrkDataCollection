@@ -21,7 +21,7 @@ http://www.cisst.org/cisst/license.txt.
 #include <chrono>
 #include <string>
 
-#include "udp_tx.hpp"
+#include "udp_tx.h"
 #include "data_collection_shared.h"
 
 using namespace std;
