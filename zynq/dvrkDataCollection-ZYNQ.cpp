@@ -1,3 +1,20 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*-    */
+/* ex: set filetype=cpp softtabstop=4 shiftwidth=4 tabstop=4 cindent expandtab: */
+
+/*
+  Author(s):  Noah Drakes
+
+  (C) Copyright 2024 Johns Hopkins University (JHU), All Rights Reserved.
+
+--- begin cisst license - do not edit ---
+
+This software is provided "as is" under an open source license, with
+no warranty.  The complete license can be found in license.txt and
+http://www.cisst.org/cisst/license.txt.
+
+--- end cisst license ---
+*/
+
 // stdlibs
 #include <iostream>
 #include <cstring>
@@ -30,10 +47,10 @@
 #include "BasePort.h"
 #include "PortFactory.h"
 #include "EthBasePort.h"
+#include "ZynqEmioPort.h"
 
 // shared header
-#include "../../shared/data_collection_shared.h"
-
+#include "data_collection_shared.h"
 
 using namespace std;
 
@@ -448,9 +465,10 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board) {
 
     state = SM_WAIT_FOR_HOST_HANDSHAKE;
 
-    while(state != SM_EXIT){     
+    while (state != SM_EXIT) {
 
-        switch(state){
+        switch (state) {
+
             case SM_WAIT_FOR_HOST_HANDSHAKE:{
 
                 memset(recvBuffer, 0, 100);
@@ -531,8 +549,8 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board) {
                 memset(recvBuffer, 0, 100);
                 ret_code = udp_nonblocking_receive(&udp_host, recvBuffer, 100);
 
-                if (ret_code > 0){
-                    if(strcmp(recvBuffer, "HOST: START DATA COLLECTION") == 0){
+                if (ret_code > 0) {
+                    if (strcmp(recvBuffer, "HOST: START DATA COLLECTION") == 0){
                         cout << "Received Message from Host: START DATA COLLECTION" << endl;
                         state = SM_START_DATA_COLLECTION;
                         break;
@@ -681,7 +699,7 @@ int main() {
     string portDescription = BasePort::DefaultPort();
     BasePort *Port = PortFactory(portDescription.c_str());
 
-    if(!Port->IsOK()){
+    if(!Port->IsOK()) {
         std::cerr << "Failed to initialize " << Port->GetPortTypeString() << std::endl;
         return -1;
     }
@@ -691,13 +709,23 @@ int main() {
         return -1;
     }
 
+    ZynqEmioPort *EmioPort = dynamic_cast<ZynqEmioPort *>(Port);
+    if (EmioPort) {
+        cout << "Verbose: " << EmioPort->GetVerbose() << std::endl;
+        // EmioPort->SetVerbose(true);
+        EmioPort->SetTimeout_us(80);
+    }
+    else {
+      cout << "[warning] failed to dynamic cast to ZynqEmioPort" << endl;
+    }
+
     AmpIO *Board = new AmpIO(Port->GetBoardId(0));
 
     Port->AddBoard(Board);
 
     bool isOK = initiate_socket_connection(&udp_host.socket);
 
-    if (!isOK){
+    if (!isOK) {
         cout << "[error] failed to establish socket connection !!" << endl;
         return -1;
     }
@@ -708,4 +736,3 @@ int main() {
 
     return 0;
 }
-
