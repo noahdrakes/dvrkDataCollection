@@ -17,37 +17,26 @@ http://www.cisst.org/cisst/license.txt.
 
 // stdlibs
 #include <iostream>
-#include <cstring>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <cstdlib>
-#include <iostream>
-#include <sstream>
-#include <fstream>
-#include <vector>
 #include <string>
 #include <chrono>
-#include <ctime>
-#include "AmpIO.h"
-#include "pthread.h"
+#include <pthread.h>
 #include <atomic>
-#include <algorithm>
 
 // mmap contact detection circuit
 #include <stdio.h>
 #include <stdint.h>
-#include <stdlib.h>
 #include <fcntl.h>
-#include <unistd.h>
 #include <sys/mman.h>
 
 // dvrk libs
 #include "BasePort.h"
 #include "PortFactory.h"
-#include "EthBasePort.h"
 #include "ZynqEmioPort.h"
+#include "AmpIO.h"
 
 // shared header
 #include "data_collection_shared.h"
@@ -56,14 +45,18 @@ using namespace std;
 
 // UDP_MAX_PACKET_SIZE (in bytes) is calculated from GetMaxWriteDataSize (based
 // on the MTU) in EthUdpPort.cpp
-const int UDP_MAX_PACKET_SIZE = 1446;
+// PK: This is now defined in data_collection_shared.h
+const int UDP_MAX_PACKET_SIZE = UDP_REAL_MTU;
 
-// defines and variables for MIO Memory mapping for contact detections
-#define GPIO_BASE_ADDR 0xE000A000
-#define GPIO_REGION_SIZE 0x1000
-#define GPIO_BANK1_OFFSET 0x8
-#define SCLR_CLK_BASE_ADDR 0xF8000000
-#define MIO_CONTACT_DETECTION_PIN 37 // USER DEFINES THIS HARDCODED MIO PIN # WHICH IS ROUTED FOR CONTACT DETECTIONS
+// defines and variables for MIO Memory mapping for reading MIO pins
+const uint32_t GPIO_BASE_ADDR = 0xE000A000;
+const unsigned int GPIO_BANK1_OFFSET = 0x8;
+const uint32_t SCLR_CLK_BASE_ADDR = 0xF8000000;
+
+// USER DEFINES THIS HARDCODED MIO PIN # WHICH IS ROUTED FOR CONTACT DETECTIONS
+// PK: Instead of contact detection, always read all 4 MIO pins
+const unsigned int MIO_CONTACT_DETECTION_PIN = 37;
+
 volatile uint32_t *GPIO_MEM_REGION;
 float contacted_detected_timestamp; 
 bool contact_detected_flag = false; 
@@ -159,6 +152,8 @@ static int mio_mmap_init()
 
     GPIO_MEM_REGION = (volatile uint32_t * ) gpio_mmap;
 
+    // Following code ensures that APER_CLK is enabled; should not be necessary
+    // since fpgav3_emio_mmap also does this.
     void *clk_map = mmap(
         NULL,
         0x00000130,
@@ -178,6 +173,7 @@ static int mio_mmap_init()
     }
 
     munmap(clk_map, 0x00000130);
+    // End of APER_CLK check
 
     close(mem_fd);
 

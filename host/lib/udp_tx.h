@@ -20,12 +20,6 @@ http://www.cisst.org/cisst/license.txt.
 
 #include <stdint.h>
 
-#define MTU_DEFAULT 1500
-
-// correct this to value in EthUdpPort.cpp in unsigned int EthUdpPort::GetMaxReadDataSize(void) method
-#define UDP_REAL_MTU                1446
-#define UDP_MAX_QUADLET_PER_PACKET  UDP_REAL_MTU/4
-
 enum UDP_RETURN_CODES {
     UDP_DATA_IS_AVAILABLE = 0,
     UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT = -1,

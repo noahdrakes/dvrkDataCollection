@@ -22,12 +22,22 @@ http://www.cisst.org/cisst/license.txt.
 #include <stdint.h>
 #include <string.h>
 
-using namespace std;
-
-#define MAX_NUM_ENCODERS    8
-#define MAX_NUM_MOTORS      10
+const unsigned int MAX_NUM_ENCODERS = 8;
+const unsigned int MAX_NUM_MOTORS = 10;
 
 const uint32_t METADATA_MAGIC_NUMBER = 0xABCDEF12;
+
+// Default MTU=1500 (does not count 18 bytes for Ethernet frame header and CRC)
+const unsigned int MTU_DEFAULT = 1500;
+
+// Size of IPv4 header (20) and UDP header (8), counts against MTU limit
+const unsigned int IP_UDP_HEADER = 28;
+
+// correct this to value in EthUdpPort.cpp in unsigned int EthUdpPort::GetMaxReadDataSize(void) method
+// PK: Figure out whether following should instead be MTU_DEFAULT-IP_UDP_HEADER (1472)
+const unsigned int UDP_REAL_MTU = 1446;
+
+const unsigned int UDP_MAX_QUADLET_PER_PACKET = UDP_REAL_MTU/4;
 
 struct DataCollectionMeta {
     uint32_t magic_number;

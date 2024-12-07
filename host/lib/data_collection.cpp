@@ -16,20 +16,11 @@ http://www.cisst.org/cisst/license.txt.
 */
 
 #include <iostream>
-#include <cstring>
-#include <sys/socket.h>
-#include <netinet/in.h>
 #include <unistd.h>
-#include <arpa/inet.h>
 #include <stdio.h>
-#include <cstdlib>
-#include <getopt.h>
-#include <sys/select.h>
 #include <chrono>
-#include <ctime>
 #include <fstream>
 #include <string>
-#include <time.h>
 #include <pthread.h>
 
 #include "udp_tx.h"

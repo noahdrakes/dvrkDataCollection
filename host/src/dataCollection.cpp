@@ -32,7 +32,6 @@ http://www.cisst.org/cisst/license.txt.
 #include <string>
 #include <ctype.h>
 
-#include "udp_tx.h"
 #include "data_collection.h"
 
 using namespace std;

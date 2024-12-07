@@ -21,10 +21,7 @@ http://www.cisst.org/cisst/license.txt.
 #include <chrono>
 #include <string>
 
-#include "udp_tx.h"
 #include "data_collection_shared.h"
-
-using namespace std;
 
 class DataCollection {
     private:
@@ -82,13 +79,13 @@ class DataCollection {
 
         int packet_misses_counter = 0;
 
-        ofstream myFile;
+        std::ofstream myFile;
 
-        string filename;
+        std::string filename;
 
         int sock_id;
 
-        uint32_t data_packet[UDP_REAL_MTU/4] = {0};
+        uint32_t data_packet[UDP_MAX_QUADLET_PER_PACKET] = {0};
 
         int collect_data();
 

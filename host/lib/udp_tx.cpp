@@ -18,24 +18,14 @@ http://www.cisst.org/cisst/license.txt.
 #include <stdint.h>
 #include <stdio.h>
 #include <iostream>
-#include <cstring>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <unistd.h>
 #include <arpa/inet.h>
-#include <getopt.h>
 #include <sys/select.h>
-#include <cstdlib>
-#include <atomic>
 
 #include "udp_tx.h"
-
-using namespace std; 
-
-#define UDP_REAL_MTU 1446 // Define the maximum UDP packet size
-
-// Return codes for non-blocking UDP receive
-
+#include "data_collection_shared.h"
 
 bool udp_init(int *client_socket, uint8_t boardId)
 {
@@ -63,7 +53,7 @@ bool udp_init(int *client_socket, uint8_t boardId)
     ret = connect(*client_socket, (struct sockaddr*)&server_address, sizeof(server_address));
 
     if (ret != 0) {
-        cout << "Failed to connect to server [" << ipAddress << "]" << endl;
+        std::cout << "Failed to connect to server [" << ipAddress << "]" << std::endl;
         close(*client_socket);
         return false;
     }
