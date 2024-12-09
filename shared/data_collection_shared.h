@@ -1,3 +1,20 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*-    */
+/* ex: set filetype=cpp softtabstop=4 shiftwidth=4 tabstop=4 cindent expandtab: */
+
+/*
+  Author(s):  Noah Drakes
+
+  (C) Copyright 2024 Johns Hopkins University (JHU), All Rights Reserved.
+
+--- begin cisst license - do not edit ---
+
+This software is provided "as is" under an open source license, with
+no warranty.  The complete license can be found in license.txt and
+http://www.cisst.org/cisst/license.txt.
+
+--- end cisst license ---
+*/
+
 #ifndef __DATACOLLECTIONSHARED_H__
 #define __DATACOLLECTIONSHARED_H__
 
@@ -5,14 +22,24 @@
 #include <stdint.h>
 #include <string.h>
 
-using namespace std;
-
-#define MAX_NUM_ENCODERS    8
-#define MAX_NUM_MOTORS      10
+const unsigned int MAX_NUM_ENCODERS = 8;
+const unsigned int MAX_NUM_MOTORS = 10;
 
 const uint32_t METADATA_MAGIC_NUMBER = 0xABCDEF12;
 
-struct DataCollectionMeta{
+// Default MTU=1500 (does not count 18 bytes for Ethernet frame header and CRC)
+const unsigned int MTU_DEFAULT = 1500;
+
+// Size of IPv4 header (20) and UDP header (8), counts against MTU limit
+const unsigned int IP_UDP_HEADER = 28;
+
+// correct this to value in EthUdpPort.cpp in unsigned int EthUdpPort::GetMaxReadDataSize(void) method
+// PK: Figure out whether following should instead be MTU_DEFAULT-IP_UDP_HEADER (1472)
+const unsigned int UDP_REAL_MTU = 1446;
+
+const unsigned int UDP_MAX_QUADLET_PER_PACKET = UDP_REAL_MTU/4;
+
+struct DataCollectionMeta {
     uint32_t magic_number;
     uint32_t hwvers;
     uint32_t num_motors;
