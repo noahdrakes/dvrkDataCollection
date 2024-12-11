@@ -13,6 +13,10 @@ cmake_minimum_required (VERSION 3.10)
 
 project (DataCollectionZynq VERSION 0.1.0)
 
+if (NOT (Arch STREQUAL "arm32"))
+  message (FATAL_ERROR "This program must be cross-compiled for arm32 using mechatronics-embedded toolchain file")
+endif ()
+
 find_package (Amp1394 REQUIRED)
 
 # Add some warnings
