@@ -1,52 +1,62 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*-    */
+/* ex: set filetype=cpp softtabstop=4 shiftwidth=4 tabstop=4 cindent expandtab: */
+
+/*
+  Author(s):  Noah Drakes
+
+  (C) Copyright 2024 Johns Hopkins University (JHU), All Rights Reserved.
+
+--- begin cisst license - do not edit ---
+
+This software is provided "as is" under an open source license, with
+no warranty.  The complete license can be found in license.txt and
+http://www.cisst.org/cisst/license.txt.
+
+--- end cisst license ---
+*/
+
 // stdlibs
 #include <iostream>
-#include <cstring>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <cstdlib>
-#include <iostream>
-#include <sstream>
-#include <fstream>
-#include <vector>
 #include <string>
 #include <chrono>
-#include <ctime>
-#include "AmpIO.h"
-#include "pthread.h"
+#include <pthread.h>
 #include <atomic>
-#include <algorithm>
 
 // mmap contact detection circuit
 #include <stdio.h>
 #include <stdint.h>
-#include <stdlib.h>
 #include <fcntl.h>
-#include <unistd.h>
 #include <sys/mman.h>
 
 // dvrk libs
 #include "BasePort.h"
 #include "PortFactory.h"
-#include "EthBasePort.h"
+#include "ZynqEmioPort.h"
+#include "AmpIO.h"
 
 // shared header
-#include "../../shared/data_collection_shared.h"
-
+#include "data_collection_shared.h"
 
 using namespace std;
 
 // UDP_MAX_PACKET_SIZE (in bytes) is calculated from GetMaxWriteDataSize (based
 // on the MTU) in EthUdpPort.cpp
-#define UDP_MAX_PACKET_SIZE     1446
+// PK: This is now defined in data_collection_shared.h
+const int UDP_MAX_PACKET_SIZE = UDP_REAL_MTU;
 
-// defines and variables for MIO Memory mapping for contact detections
-#define GPIO_BASE_ADDR 0xE000A000
-#define GPIO_REGION_SIZE 0x1000
-#define GPIO_BANK1_OFFSET 0x8
-#define SCLR_CLK_BASE_ADDR 0xF8000000
-#define MIO_CONTACT_DETECTION_PIN 37 // USER DEFINES THIS HARDCODED MIO PIN # WHICH IS ROUTED FOR CONTACT DETECTIONS
+// defines and variables for MIO Memory mapping for reading MIO pins
+const uint32_t GPIO_BASE_ADDR = 0xE000A000;
+const unsigned int GPIO_BANK1_OFFSET = 0x8;
+const uint32_t SCLR_CLK_BASE_ADDR = 0xF8000000;
+
+// USER DEFINES THIS HARDCODED MIO PIN # WHICH IS ROUTED FOR CONTACT DETECTIONS
+// PK: Instead of contact detection, always read all 4 MIO pins
+const unsigned int MIO_CONTACT_DETECTION_PIN = 37;
+
 volatile uint32_t *GPIO_MEM_REGION;
 float contacted_detected_timestamp; 
 bool contact_detected_flag = false; 
@@ -99,14 +109,14 @@ enum UDP_RETURN_CODES {
 };
 
 // Socket Data struct
-struct UDP_Info{
+struct UDP_Info {
     int socket;
     struct sockaddr_in Addr;
     socklen_t AddrLen;
-} udp_host ; // this is global bc there will only be one
+} udp_host; // this is global bc there will only be one
 
 
-struct Double_Buffer_Info{
+struct Double_Buffer_Info {
     uint32_t double_buffer[2][UDP_MAX_PACKET_SIZE/4]; //note: changed from 1500 which makes sense
     uint16_t buffer_size; 
     uint8_t prod_buf;
@@ -115,8 +125,8 @@ struct Double_Buffer_Info{
 };
 
 
-static int mio_mmap_init(){
-
+static int mio_mmap_init()
+{
     int mem_fd;
 
     // Open /dev/mem for accessing physical memory
@@ -126,11 +136,11 @@ static int mio_mmap_init(){
     }
 
     void *gpio_mmap = mmap(
-        NULL, 
+        NULL,
         0x1000,
         PROT_READ | PROT_WRITE,
         MAP_SHARED,
-        mem_fd, 
+        mem_fd,
         GPIO_BASE_ADDR
     );
 
@@ -142,50 +152,53 @@ static int mio_mmap_init(){
 
     GPIO_MEM_REGION = (volatile uint32_t * ) gpio_mmap;
 
+    // Following code ensures that APER_CLK is enabled; should not be necessary
+    // since fpgav3_emio_mmap also does this.
     void *clk_map = mmap(
-        NULL, 
+        NULL,
         0x00000130,
         PROT_READ | PROT_WRITE,
         MAP_SHARED,
-        mem_fd, 
+        mem_fd,
         SCLR_CLK_BASE_ADDR
     );
 
     volatile unsigned long *clock_map = (volatile unsigned long *)clk_map;
-    
+
     uint32_t bitmsk = (1 << 22);
     uint32_t aper_clk_reg = clock_map[0x12C/4];
 
-    if ((aper_clk_reg & bitmsk) == 0){
+    if ((aper_clk_reg & bitmsk) == 0) {
         clock_map[0x12C/4] |= bitmsk;
-    }   
+    }
 
-    munmap(clk_map, 0x00000130); 
+    munmap(clk_map, 0x00000130);
+    // End of APER_CLK check
 
     close(mem_fd);
 
     return 0;
 }
 
-static bool isContactDetected(uint16_t MIO_PIN){
-
-    if (GPIO_MEM_REGION == NULL){
+static bool isContactDetected(uint16_t MIO_PIN)
+{
+    if (GPIO_MEM_REGION == NULL) {
         printf("[ERROR] MIO mmap region initialized incorrectly!\n");
         return false;
     }
 
-    if (MIO_PIN < 34 || MIO_PIN >37){
+    if ((MIO_PIN < 34) || (MIO_PIN > 37)) {
         printf("Invalid MIO PIN");
         return false;
     }
 
     uint32_t gpio_bank1 = GPIO_MEM_REGION[GPIO_BANK1_OFFSET/4];
     return ((~gpio_bank1 & (1 << (MIO_PIN - 32))) >> (MIO_PIN - 32)) == 1;
-
 }
 
 // checks if data is available from udp buffer (for noblocking udp recv)
-int udp_nonblocking_receive(UDP_Info *udp_host, void *data, int size) {
+int udp_nonblocking_receive(UDP_Info *udp_host, void *data, int size)
+{
     fd_set readfds;
     FD_ZERO(&readfds);
     FD_SET(udp_host->socket, &readfds);
@@ -224,10 +237,10 @@ int udp_nonblocking_receive(UDP_Info *udp_host, void *data, int size) {
 }
 
 // udp transmit function. wrapper for sendo that abstracts the UDP_Info_struct
-static int udp_transmit(UDP_Info *udp_host, void * data, int size){
-    
+static int udp_transmit(UDP_Info *udp_host, void * data, int size)
+{
     // change UDP_MAX_QUADLET to 
-    if (size > UDP_MAX_PACKET_SIZE){
+    if (size > UDP_MAX_PACKET_SIZE) {
         return -1;
     }
 
@@ -235,8 +248,8 @@ static int udp_transmit(UDP_Info *udp_host, void * data, int size){
 }
 
 
-static bool initiate_socket_connection(int *host_socket){
-
+static bool initiate_socket_connection(int *host_socket)
+{
     cout << endl << "Initiating Socket Connection with DVRK board..." << endl;
 
     udp_host.AddrLen = sizeof(udp_host.Addr);
@@ -266,7 +279,8 @@ static bool initiate_socket_connection(int *host_socket){
 }
 
 // calculate the size of a sample in quadlets
-static uint16_t calculate_quadlets_per_sample(uint8_t num_encoders, uint8_t num_motors){
+static uint16_t calculate_quadlets_per_sample(uint8_t num_encoders, uint8_t num_motors)
+{
     // SAMPLE STRUCTURE
 
     // 1 quadlet = 4 bytes
@@ -278,21 +292,23 @@ static uint16_t calculate_quadlets_per_sample(uint8_t num_encoders, uint8_t num_
     // Digtial IO Values                                                        [1 quadlet * digital IO]
 
     return (1 + 1 + (2*(num_encoders)) + (num_motors));
-
 }
 
 // calculates the # of samples per packet in quadlets
-static uint16_t calculate_samples_per_packet(uint8_t num_encoders, uint8_t num_motors){
+static uint16_t calculate_samples_per_packet(uint8_t num_encoders, uint8_t num_motors)
+{
     return ((UDP_MAX_PACKET_SIZE/4)/ calculate_quadlets_per_sample(num_encoders, num_motors) );
 }
 
 // calculate # of quadlets per packet
-static uint16_t calculate_quadlets_per_packet(uint8_t num_encoders, uint8_t num_motors){
+static uint16_t calculate_quadlets_per_packet(uint8_t num_encoders, uint8_t num_motors)
+{
     return (calculate_samples_per_packet(num_encoders, num_motors) * calculate_quadlets_per_sample(num_encoders, num_motors));
 }
 
 // returns the duration between start and end using the chrono
-static float convert_chrono_duration_to_float(chrono::high_resolution_clock::time_point start, chrono::high_resolution_clock::time_point end ){
+static float convert_chrono_duration_to_float(chrono::high_resolution_clock::time_point start, chrono::high_resolution_clock::time_point end )
+{
     std::chrono::duration<float> duration = end - start;
     return duration.count();
 }
@@ -300,14 +316,14 @@ static float convert_chrono_duration_to_float(chrono::high_resolution_clock::tim
 // loads data buffer for data collection
     // size of the data buffer is dependent on encoder count and motor count
     // see calculate_quadlets_per_sample method for data formatting
-static bool load_data_packet(BasePort *Port, AmpIO *Board, uint32_t *data_packet, uint8_t num_encoders, uint8_t num_motors){
-
-    if(data_packet == NULL){
+static bool load_data_packet(BasePort *Port, AmpIO *Board, uint32_t *data_packet, uint8_t num_encoders, uint8_t num_motors)
+{
+    if (data_packet == NULL) {
         cout << "[ERROR - load_data_packet] databuffer pointer is null" << endl;
         return false;
     }
 
-    if (sizeof(data_packet) == 0){
+    if (sizeof(data_packet) == 0) {
         cout << "[ERROR - load_data_packet] len of databuffer == 0" << endl;
         return false;
     }
@@ -315,23 +331,22 @@ static bool load_data_packet(BasePort *Port, AmpIO *Board, uint32_t *data_packet
     uint16_t samples_per_packet = calculate_samples_per_packet(num_encoders, num_motors);
     uint16_t count = 0;
 
-
     // CAPTURE DATA 
-    for (int i = 0; i < samples_per_packet; i++){
+    for (int i = 0; i < samples_per_packet; i++) {
 
-        if ((!contact_detected_flag) && isContactDetected(MIO_CONTACT_DETECTION_PIN)){
+        if ((!contact_detected_flag) && isContactDetected(MIO_CONTACT_DETECTION_PIN)) {
             contact_detected_flag = true;
         }
 
-        while(!Port->ReadAllBoards()){
+        while(!Port->ReadAllBoards()) {
             emio_read_error_counter++;
         }
 
-        if ((!contact_detected_flag) && isContactDetected(MIO_CONTACT_DETECTION_PIN)){
+        if ((!contact_detected_flag) && isContactDetected(MIO_CONTACT_DETECTION_PIN)) {
             contact_detected_flag = true;
         }
 
-        if (!Board->ValidRead()){
+        if (!Board->ValidRead()) {
             cout << "[ERROR in load_data_packet] invalid read for ReadAllBoards" << endl;
             return false;
         }
@@ -343,42 +358,41 @@ static bool load_data_packet(BasePort *Port, AmpIO *Board, uint32_t *data_packet
 
         last_timestamp = time_elapsed;
 
-
         data_packet[count++] = *reinterpret_cast<uint32_t *> (&time_elapsed);
 
         // DATA 2: encoder position
-        for (int i = 0; i < num_encoders; i++){
+        for (int i = 0; i < num_encoders; i++) {
             int32_t encoder_pos = Board->GetEncoderPosition(i);
             data_packet[count++] = static_cast<uint32_t>(encoder_pos + Board->GetEncoderMidRange());
         }
 
         // DATA 3: encoder velocity
-        for (int i = 0; i < num_encoders; i++){
+        for (int i = 0; i < num_encoders; i++) {
             float encoder_velocity_float= static_cast<float>(Board->GetEncoderVelocityPredicted(i));
             data_packet[count++] = *reinterpret_cast<uint32_t *>(&encoder_velocity_float);
         }
 
         // DATA 4 & 5: motor current and motor status (for num_motors)
-        for (int i = 0; i < num_motors; i++){
+        for (int i = 0; i < num_motors; i++) {
             uint32_t motor_curr = Board->GetMotorCurrent(i); 
-            uint32_t motor_status = (Board->GetMotorStatus(i));
+            uint32_t motor_status = Board->GetMotorStatus(i);
             data_packet[count++] = (uint32_t)(((motor_status & 0x0000FFFF) << 16) | (motor_curr & 0x0000FFFF));
         }
 
         data_packet[count++] = Board->ReadDigitalIO();
 
-        if (contact_detected_flag && (contacted_detected_timestamp == 0)){
+        if (contact_detected_flag && (contacted_detected_timestamp == 0)) {
             contacted_detected_timestamp = last_timestamp;
             printf("Contact Detected at %fs\n", contacted_detected_timestamp);
         }
 
         sample_count++;
     }
-    
     return true;    
 }
 
-void package_meta_data(DataCollectionMeta *dc_meta, Double_Buffer_Info *db, AmpIO *board){
+void package_meta_data(DataCollectionMeta *dc_meta, Double_Buffer_Info *db, AmpIO *board)
+{
     uint8_t num_encoders = (uint8_t) board->GetNumEncoders();
     uint8_t num_motors = (uint8_t) board->GetNumMotors();
 
@@ -392,7 +406,8 @@ void package_meta_data(DataCollectionMeta *dc_meta, Double_Buffer_Info *db, AmpI
     dc_meta->samples_per_packet = (uint32_t) calculate_samples_per_packet(num_encoders, num_motors);
 }
 
-void reset_double_buffer_info(Double_Buffer_Info *db, AmpIO *board){
+void reset_double_buffer_info(Double_Buffer_Info *db, AmpIO *board)
+{
     db->cons_buf = 0;
     db->prod_buf = 0;
     db->cons_busy = 0;
@@ -401,7 +416,8 @@ void reset_double_buffer_info(Double_Buffer_Info *db, AmpIO *board){
     memset(db->double_buffer, 0, sizeof(db->double_buffer));
 }
 
-void *consume_data(void *arg){
+void *consume_data(void *arg)
+{
     Double_Buffer_Info* db = (Double_Buffer_Info*)arg;
 
     while (!stop_data_collection_flag) {
@@ -412,7 +428,7 @@ void *consume_data(void *arg){
             udp_transmit(&udp_host, db->double_buffer[db->cons_buf], db->buffer_size);
             data_packet_count++;
             db->cons_busy = 0; 
-            
+
             db->cons_buf = (db->cons_buf + 1) % 2;
         }   
     }
@@ -420,8 +436,8 @@ void *consume_data(void *arg){
     return nullptr;
 }
 
-static int dataCollectionStateMachine(BasePort *port, AmpIO *board) {
-
+static int dataCollectionStateMachine(BasePort *port, AmpIO *board)
+{
     cout << "Starting Handshake Routine..." << endl << endl;
     cout << "Start Data Collection Client on HOST to complete handshake..." << endl;
 
@@ -430,149 +446,144 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board) {
 
     Double_Buffer_Info db;
     reset_double_buffer_info(&db, board);
-    
-    
-    if(mio_mmap_init() != 0){
+
+    if (mio_mmap_init() != 0) {
         state = SM_CLOSE_SOCKET;
         ret_code = SM_FAIL;
     }
-    
+
     char recvBuffer[100] = {0};
+
+    int ret;
+    char recv_buffer[29];
 
     struct DataCollectionMeta data_collection_meta;
 
     uint8_t num_encoders = board->GetNumEncoders();
     uint8_t num_motors = board->GetNumMotors();
-    
+
     pthread_t consumer_t;
 
     state = SM_WAIT_FOR_HOST_HANDSHAKE;
 
-    while(state != SM_EXIT){     
+    while (state != SM_EXIT) {
 
-        switch(state){
-            case SM_WAIT_FOR_HOST_HANDSHAKE:{
+        switch (state) {
+
+            case SM_WAIT_FOR_HOST_HANDSHAKE:
 
                 memset(recvBuffer, 0, 100);
                 ret_code = udp_nonblocking_receive(&udp_host, recvBuffer, 100);
 
-                if (ret_code > 0){
-                    if(strcmp(recvBuffer,  HOST_READY_CMD) == 0){
+                if (ret_code > 0) {
+                    if (strcmp(recvBuffer,  HOST_READY_CMD) == 0) {
                         cout << "Received Message - " <<  HOST_READY_CMD << endl;
                         state = SM_SEND_DATA_COLLECTION_METADATA;
-                        break;
-                    } 
-                } else if (ret_code == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT || ret_code == UDP_NON_UDP_DATA_IS_AVAILABLE){
-                    break;
-                } else {
+                    }
+                }
+                else if (ret_code == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT || ret_code == UDP_NON_UDP_DATA_IS_AVAILABLE) {
+                    state = SM_WAIT_FOR_HOST_HANDSHAKE;
+                }
+                else {
                     ret_code = SM_UDP_ERROR;
                     state = SM_CLOSE_SOCKET;
-                    break;
                 }
-            }
+                break;
 
-            case SM_SEND_DATA_COLLECTION_METADATA:{
+            case SM_SEND_DATA_COLLECTION_METADATA:
+
                 package_meta_data(&data_collection_meta, &db, board);
 
-                if(udp_transmit(&udp_host,  &data_collection_meta, sizeof(struct DataCollectionMeta )) < 1 ){
+                if (udp_transmit(&udp_host,  &data_collection_meta, sizeof(struct DataCollectionMeta )) < 1 ) {
                     perror("udp transmit fail");
                     cout << "client addr is invalid." << endl;
                     ret_code = SM_UDP_ERROR;
                     state = SM_CLOSE_SOCKET;
-                    break;
                 }
-
-                state = SM_WAIT_FOR_HOST_RECV_METADATA;
+                else {
+                    state = SM_WAIT_FOR_HOST_RECV_METADATA;
+                }
                 break;
-            }
 
-            case SM_WAIT_FOR_HOST_RECV_METADATA:{
+            case SM_WAIT_FOR_HOST_RECV_METADATA:
 
                 memset(recvBuffer, 0, 100);
                 ret_code = udp_nonblocking_receive(&udp_host, recvBuffer, 100);
 
-                if (ret_code > 0){
-                    if(strcmp(recvBuffer, HOST_RECVD_METADATA) == 0){
+                if (ret_code > 0) {
+                    if (strcmp(recvBuffer, HOST_RECVD_METADATA) == 0) {
                         cout << "Received Message: " << HOST_RECVD_METADATA << endl;
                         cout << "Handshake Complete!" << endl;
 
                         state = SM_SEND_READY_STATE_TO_HOST;
-                        break; 
                     } else {
                         state = SM_WAIT_FOR_HOST_RECV_METADATA;
-                        break;
                     }
-                } else if (ret_code == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT || ret_code == UDP_NON_UDP_DATA_IS_AVAILABLE){
+                }
+                else if (ret_code == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT || ret_code == UDP_NON_UDP_DATA_IS_AVAILABLE) {
+                    // Stay in same state
                     state = SM_WAIT_FOR_HOST_RECV_METADATA;
-                    break;
                 } else {
                     ret_code = SM_UDP_ERROR;
                     state = SM_CLOSE_SOCKET;
                 }
-            }
+                break;
 
-            case SM_SEND_READY_STATE_TO_HOST:{
+            case SM_SEND_READY_STATE_TO_HOST:
 
-                if(udp_transmit(&udp_host,  (char *) ZYNQ_READY_CMD, sizeof(ZYNQ_READY_CMD)) < 1 ){
+                if (udp_transmit(&udp_host,  (char *) ZYNQ_READY_CMD, sizeof(ZYNQ_READY_CMD)) < 1 ) {
                     perror("sendto failed");
                     cout << "[ERROR UDP] client addr is invalid." << endl;
                     ret_code = SM_UDP_ERROR;
                     state = SM_CLOSE_SOCKET;
-                    break;
                 }
-
-                cout << endl << "Waiting for Host to start data collection..." << endl << endl;
-                state = SM_WAIT_FOR_HOST_START_CMD;
+                else {
+                    cout << endl << "Waiting for Host to start data collection..." << endl << endl;
+                    state = SM_WAIT_FOR_HOST_START_CMD;
+                }
                 break;
-            }
 
-            case SM_WAIT_FOR_HOST_START_CMD: {
-                
+            case SM_WAIT_FOR_HOST_START_CMD:
+
                 memset(recvBuffer, 0, 100);
                 ret_code = udp_nonblocking_receive(&udp_host, recvBuffer, 100);
 
-                if (ret_code > 0){
-                    if(strcmp(recvBuffer, "HOST: START DATA COLLECTION") == 0){
+                if (ret_code > 0) {
+                    if (strcmp(recvBuffer, "HOST: START DATA COLLECTION") == 0) {
                         cout << "Received Message from Host: START DATA COLLECTION" << endl;
                         state = SM_START_DATA_COLLECTION;
-                        break;
-                    } else if (strcmp(recvBuffer, "CLIENT: Terminate Server") == 0){
-
+                    }
+                    else if (strcmp(recvBuffer, "CLIENT: Terminate Server") == 0) {
                         ret_code = SM_SUCCESS;
                         state = SM_CLOSE_SOCKET;
-                        break;
-                    } else {
-                            cout << "recv Buffer: " << recvBuffer << endl;
-                            cout << "INVALID ENTRY" << endl;
-                            state = SM_CLOSE_SOCKET;
-                        // }
-                        break;
                     }
-                } else if (ret_code == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT || ret_code == UDP_NON_UDP_DATA_IS_AVAILABLE){
-
+                    else {
+                        cout << "recv Buffer: " << recvBuffer << endl;
+                        cout << "INVALID ENTRY" << endl;
+                        state = SM_CLOSE_SOCKET;
+                    }
+                }
+                else if (ret_code == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT || ret_code == UDP_NON_UDP_DATA_IS_AVAILABLE) {
+                    // Stay in same state
                     state = SM_WAIT_FOR_HOST_START_CMD;
-                    break;
 
-                } else {
+                }
+                else {
                     // UDP error
                     ret_code = SM_UDP_ERROR;
                     state = SM_CLOSE_SOCKET;
-                    break;
                 }
-            } 
+                break;
 
-            case SM_START_DATA_COLLECTION:{
+            case SM_START_DATA_COLLECTION:
 
                 stop_data_collection_flag = false;
-
                 // set start time for data collection
                 start_time = std::chrono::high_resolution_clock::now();
-
                 state = SM_START_CONSUMER_THREAD;
                 break;
-            }
 
-            case SM_START_CONSUMER_THREAD:{
+            case SM_START_CONSUMER_THREAD:
 
                 if (pthread_create(&consumer_t, nullptr, consume_data, &db) != 0) {
                     std::cerr << "Error creating consumer thread" << std::endl;
@@ -583,11 +594,10 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board) {
 
                 state = SM_PRODUCE_DATA;
                 break;
-            }
 
-            case SM_PRODUCE_DATA:{
-                
-                if ( !load_data_packet(port, board, db.double_buffer[db.prod_buf], num_encoders, num_motors)){
+            case SM_PRODUCE_DATA:
+
+                if ( !load_data_packet(port, board, db.double_buffer[db.prod_buf], num_encoders, num_motors)) {
                     cout << "[ERROR]load data buffer fail" << endl;
                     return false;
                 }
@@ -600,21 +610,18 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board) {
                 state = SM_CHECK_FOR_STOP_DATA_COLLECTION_CMD;
                 break;
 
-            }
+            case SM_CHECK_FOR_STOP_DATA_COLLECTION_CMD:
 
-            case SM_CHECK_FOR_STOP_DATA_COLLECTION_CMD:{
+                ret = udp_nonblocking_receive(&udp_host, recv_buffer, 29);
 
-                char recv_buffer[29];
-                int ret = udp_nonblocking_receive(&udp_host, recv_buffer, 29);
-                
-                if (ret > 0){
-                    if(strcmp(recv_buffer, "HOST: STOP DATA COLLECTION") == 0){
+                if (ret > 0) {
+                    if (strcmp(recv_buffer, "HOST: STOP DATA COLLECTION") == 0) {
                         cout << "Message from Host: STOP DATA COLLECTION" << endl;
 
                         stop_data_collection_flag = true;
 
                         pthread_join(consumer_t, nullptr);
-                        
+
                         printf("------------------------------------------------\n");
                         printf("CONTACT DETECTED: ");
                         if (contact_detected_flag){
@@ -636,38 +643,34 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board) {
 
                         state = SM_WAIT_FOR_HOST_START_CMD;
                         printf("Waiting for command from host...\n");
-                        break;
                         
                     } else {
-                    
                         // something went terribly wrong
                         cout << "[error] unexpected UDP message. Host and Processor are out of sync" << endl;
                         cout << "message: " << recv_buffer << endl;
                         ret_code = SM_UDP_ERROR;
                         state = SM_CLOSE_SOCKET;
-                        break;
                     }
                 } else if (ret == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT || ret_code == UDP_NON_UDP_DATA_IS_AVAILABLE){
                     state = SM_PRODUCE_DATA;
-                    break;
                 } else {
                     cout << "else" << endl;
                 }
-            }
+                break;
 
-            case SM_CLOSE_SOCKET:{
-                if (ret_code != SM_SUCCESS){
-                    cout << "[UDP_ERROR] - return code: " << ret_code << " | Make sure that server application is executing on the processor! The udp connection may closed." << endl;;
+            case SM_CLOSE_SOCKET:
+                if (ret_code != SM_SUCCESS) {
+                    cout << "[UDP_ERROR] - return code: " << ret_code
+                         << " | Make sure that server application is executing on the processor! The udp connection may closed." << endl;
                 } 
 
                 cout << endl << ZYNQ_TERMINATATION_SUCCESSFUL << endl;
 
                 udp_transmit(&udp_host,  (void*) ZYNQ_TERMINATATION_SUCCESSFUL, 31);
-                
+
                 close(udp_host.socket);
                 state = SM_EXIT;
                 break;
-            }
         }
     }
     return SM_SUCCESS;
@@ -675,13 +678,12 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board) {
 
 
 
-
-int main() {
-
+int main()
+{
     string portDescription = BasePort::DefaultPort();
     BasePort *Port = PortFactory(portDescription.c_str());
 
-    if(!Port->IsOK()){
+    if(!Port->IsOK()) {
         std::cerr << "Failed to initialize " << Port->GetPortTypeString() << std::endl;
         return -1;
     }
@@ -691,13 +693,23 @@ int main() {
         return -1;
     }
 
+    ZynqEmioPort *EmioPort = dynamic_cast<ZynqEmioPort *>(Port);
+    if (EmioPort) {
+        cout << "Verbose: " << EmioPort->GetVerbose() << std::endl;
+        // EmioPort->SetVerbose(true);
+        EmioPort->SetTimeout_us(80);
+    }
+    else {
+      cout << "[warning] failed to dynamic cast to ZynqEmioPort" << endl;
+    }
+
     AmpIO *Board = new AmpIO(Port->GetBoardId(0));
 
     Port->AddBoard(Board);
 
     bool isOK = initiate_socket_connection(&udp_host.socket);
 
-    if (!isOK){
+    if (!isOK) {
         cout << "[error] failed to establish socket connection !!" << endl;
         return -1;
     }
@@ -708,4 +720,3 @@ int main() {
 
     return 0;
 }
-
