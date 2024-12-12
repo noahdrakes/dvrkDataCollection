@@ -31,6 +31,11 @@ class DataCollection {
         DataCollection(const DataCollection &);
         DataCollection& operator=(const DataCollection&);
 
+        // PK TEMP
+        const unsigned long QLA1_String = 0x514C4131;
+        const unsigned long dRA1_String = 0x64524131;
+        const unsigned long DQLA_String = 0x44514C41;
+
         enum DataCollectionStateMachine {
             SM_READY = 0,
             SM_SEND_READY_STATE_TO_PS,

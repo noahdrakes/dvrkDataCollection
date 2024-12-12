@@ -40,7 +40,7 @@ const unsigned int UDP_REAL_MTU = 1446;
 const unsigned int UDP_MAX_QUADLET_PER_PACKET = UDP_REAL_MTU/4;
 
 struct DataCollectionMeta {
-    uint32_t magic_number;
+    // uint32_t magic_number;
     uint32_t hwvers;
     uint32_t num_motors;
     uint32_t num_encoders;

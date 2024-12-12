@@ -396,7 +396,7 @@ void package_meta_data(DataCollectionMeta *dc_meta, Double_Buffer_Info *db, AmpI
     uint8_t num_encoders = (uint8_t) board->GetNumEncoders();
     uint8_t num_motors = (uint8_t) board->GetNumMotors();
 
-    dc_meta->magic_number = METADATA_MAGIC_NUMBER; // metadata magic word
+    // dc_meta->magic_number = METADATA_MAGIC_NUMBER; // metadata magic word
     dc_meta->hwvers = board->GetHardwareVersion();
     dc_meta->num_encoders = (uint32_t) num_encoders;
     dc_meta->num_motors = (uint32_t) num_motors;

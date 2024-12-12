@@ -40,8 +40,7 @@ inline uint32_t bswap_32(uint32_t data) { return _byteswap_ulong(data); }
 #include <byteswap.h>
 #endif
 
-// PK TEMP
-const unsigned long dRA1_String = 0x64524131;
+
 
 ///////////////////////
 // UTILITY METHODS //
@@ -298,7 +297,7 @@ bool DataCollection :: init(uint8_t boardID)
             case SM_RECV_DATA_COLLECTION_META_DATA:
                 ret_code = udp_nonblocking_receive(sock_id, &dc_meta, sizeof(meta_data));
                 if (ret_code > 0) {
-                    if (dc_meta.magic_number == METADATA_MAGIC_NUMBER) {
+                    if (dc_meta.hwvers == dRA1_String || dc_meta.hwvers == QLA1_String || dc_meta.hwvers == DQLA_String) {
                         cout << "Received Message from Zynq: RECEIVED METADATA" << endl << endl;
 
                         char hw_vers[5];
