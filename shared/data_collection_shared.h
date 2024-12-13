@@ -39,8 +39,10 @@ const unsigned int UDP_REAL_MTU = 1446;
 
 const unsigned int UDP_MAX_QUADLET_PER_PACKET = UDP_REAL_MTU/4;
 
+// Arbitrary, used as a const for consistency. Can be changed later
+const unsigned int MAX_CMD_STRING_SIZE = 100;
+
 struct DataCollectionMeta {
-    // uint32_t magic_number;
     uint32_t hwvers;
     uint32_t num_motors;
     uint32_t num_encoders;
@@ -62,12 +64,13 @@ enum StateMachineReturnCodes {
 
 // Commands Sent between Host and Zynq
     // HOST
-    #define HOST_START_DATA_COLLECTION "HOST: START DATA COLLECTION"
-    #define HOST_READY_CMD  "HOST: READY FOR DATA COLLECTION"
-    #define HOST_RECVD_METADATA "HOST: RECEIVED METADATA"
-    #define HOST_STOP_DATA_COLLECTION "HOST: STOP DATA COLLECTION"
+    #define HOST_START_DATA_COLLECTION                      "HOST: START DATA COLLECTION"
+    #define HOST_READY_CMD                                  "HOST: READY FOR DATA COLLECTION"
+    #define HOST_READY_CMD_W_PS_IO                          "HOST: READY FOR DATA COLLECTION - WITH PS IO"
+    #define HOST_RECVD_METADATA                             "HOST: RECEIVED METADATA"
+    #define HOST_STOP_DATA_COLLECTION                       "HOST: STOP DATA COLLECTION"
     // ZYNQ
-    #define ZYNQ_READY_CMD "ZYNQ: READY FOR DATA COLLECTION"
-    #define ZYNQ_TERMINATATION_SUCCESSFUL "ZYNQ: TERMINATION SUCCESSFUL"
+    #define ZYNQ_READY_CMD                                  "ZYNQ: READY FOR DATA COLLECTION"
+    #define ZYNQ_TERMINATATION_SUCCESSFUL                   "ZYNQ: TERMINATION SUCCESSFUL"
 
 #endif

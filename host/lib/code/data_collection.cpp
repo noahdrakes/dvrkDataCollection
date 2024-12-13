@@ -41,7 +41,6 @@ inline uint32_t bswap_32(uint32_t data) { return _byteswap_ulong(data); }
 #endif
 
 
-
 ///////////////////////
 // UTILITY METHODS //
 ///////////////////////
@@ -111,7 +110,11 @@ void DataCollection:: process_sample(uint32_t *data_packet, int start_idx)
         idx++;
     }
 
-    proc_sample.digital_io = data_packet[idx++];
+    if (use_ps_io){
+        proc_sample.digital_io = data_packet[idx++];
+        proc_sample.mio_pins = data_packet[idx++];
+    }
+    
 }
 
 int DataCollection :: collect_data()
@@ -132,9 +135,9 @@ int DataCollection :: collect_data()
 
         switch(sm_state){
             case SM_SEND_START_DATA_COLLECTIION_CMD_TO_PS:
-
-                udp_transmit(sock_id, (char *) HOST_START_DATA_COLLECTION, 28);
-
+          
+                udp_transmit(sock_id, (char *) HOST_START_DATA_COLLECTION, sizeof(HOST_START_DATA_COLLECTION));
+                
                 sm_state = SM_START_DATA_COLLECTION;
                 break;
 
@@ -165,10 +168,19 @@ int DataCollection :: collect_data()
                 }
 
                 for (int i = 1; i < dc_meta.num_motors + 1; i++) {
-                    myFile << "MOTOR_STATUS_" << i  << ",";
+                    myFile << "MOTOR_STATUS_" << i;
+
+                    if (i < dc_meta.num_motors){
+                        myFile << ",";
+                    }
                 }
 
-                myFile << "DIGITAL_IO" << endl;
+                if (use_ps_io){
+                    myFile << ",DIGITAL_IO,MIO_PINS";
+                }
+
+                myFile << endl;
+                
 
                 while (!stop_data_collection_flag) {
 
@@ -205,16 +217,30 @@ int DataCollection :: collect_data()
                                     int16_t tmp;
                                     for (int j = 0; j < dc_meta.num_motors; j++) {
                                         tmp = static_cast<int16_t>(proc_sample.motor_status[j]);
-                                        myFile << tmp << ",";
+                                        myFile << tmp;
+
+                                        if (j < dc_meta.num_motors - 1){
+                                            myFile << ",";
+                                        }
                                     }
                                 }
                                 else {
                                     for (int j = 0; j < dc_meta.num_motors; j++) {
-                                        myFile << proc_sample.motor_status[j] << ",";
+                                        myFile << proc_sample.motor_status[j];
+
+                                        if (j < dc_meta.num_motors - 1){
+                                            myFile << ",";
+                                        }
                                     }
                                 }
 
-                                myFile << proc_sample.digital_io << endl;
+                                if (use_ps_io){
+                                    myFile << "," << proc_sample.digital_io;
+                                    myFile << "," << proc_sample.mio_pins;
+                                }
+
+                                myFile << endl;
+                                
 
                                 memset(&proc_sample, 0, sizeof(proc_sample));
 
@@ -269,7 +295,7 @@ DataCollection::DataCollection()
 
 // TODO: need to add useful return statements -> all the close socket cases are just returns
 // make sure logic checks out 
-bool DataCollection :: init(uint8_t boardID)
+bool DataCollection :: init(uint8_t boardID, bool usePSIO)
 {
     if(!udp_init(&sock_id, boardID)) {
         return false;
@@ -278,24 +304,28 @@ bool DataCollection :: init(uint8_t boardID)
     sm_state = SM_SEND_READY_STATE_TO_PS;
     int ret_code = 0;
 
-    char sendReadyStateCMD[] = "HOST: READY FOR DATA COLLECTION";
-    char sendMetaDataRecvd[] = "HOST: RECEIVED METADATA";
-
     char recvBuffer[100] = {0};
-    uint32_t meta_data[7] = {0};
 
     bool error_flag = false;
+
+    use_ps_io = usePSIO;
 
     // Handshaking PS
     while(1) {
         switch(sm_state) {
             case SM_SEND_READY_STATE_TO_PS:
-                udp_transmit(sock_id, sendReadyStateCMD , strlen(sendReadyStateCMD));
+
+                if (use_ps_io){
+                    udp_transmit(sock_id, (char *)HOST_READY_CMD_W_PS_IO, sizeof(HOST_READY_CMD_W_PS_IO));
+                } else {
+                    udp_transmit(sock_id, (char *)HOST_READY_CMD, sizeof(HOST_READY_CMD));
+                }
+                
                 sm_state = SM_RECV_DATA_COLLECTION_META_DATA;
                 break;
 
             case SM_RECV_DATA_COLLECTION_META_DATA:
-                ret_code = udp_nonblocking_receive(sock_id, &dc_meta, sizeof(meta_data));
+                ret_code = udp_nonblocking_receive(sock_id, &dc_meta, sizeof(dc_meta));
                 if (ret_code > 0) {
                     if (dc_meta.hwvers == dRA1_String || dc_meta.hwvers == QLA1_String || dc_meta.hwvers == DQLA_String) {
                         cout << "Received Message from Zynq: RECEIVED METADATA" << endl << endl;
@@ -315,7 +345,6 @@ bool DataCollection :: init(uint8_t boardID)
                         sm_state = SM_SEND_METADATA_RECV;
                     } else {
                         cout << "[ERROR] Host data collection is out of sync with Zynq State Machine. Restart Zynq and Host Program";
-                        cout << "Recvd Data: " << meta_data << endl;
                         sm_state = SM_CLOSE_SOCKET;
                     }
                 } else if (ret_code == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT || ret_code == UDP_NON_UDP_DATA_IS_AVAILABLE){
@@ -327,7 +356,7 @@ bool DataCollection :: init(uint8_t boardID)
                 break;
 
             case SM_SEND_METADATA_RECV:
-                udp_transmit(sock_id, sendMetaDataRecvd, sizeof(sendMetaDataRecvd));
+                udp_transmit(sock_id, (char *) HOST_RECVD_METADATA , sizeof(HOST_RECVD_METADATA ));
                 sm_state = SM_WAIT_FOR_PS_HANDSHAKE;
                 break;
 

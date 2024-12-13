@@ -75,46 +75,77 @@ int main(int argc, char *argv[])
     int dataCollectionDuration = 0;
     bool startFlag = false;
     bool timedCaptureFlag = false;
+    bool use_ps_io_flag = false;
     uint8_t boardID; 
+    
 
-    if (argc == 3) {
+    // cmd line variables
+    uint8_t min_args = 1;
 
-        if (!isInteger(argv[1])) {
-            cout << "invalid boardID arg" << endl;
-            return -1;
-        }
+    //cleaner cmd line args
 
-        if (!isInteger(argv[2])) {
-            cout << "invalid dataCollectionDuration arg" << endl;
-            return -1;
-        }
-
-        dataCollectionDuration = atoi(argv[2]);
-        boardID = atoi(argv[1]);
-        timedCaptureFlag = true;
-
-    // start boardID
-    } else if (argc == 2) {
-
-        if (!isInteger(argv[1])) {
-            cout << "invalid boardID arg" << endl;
-            return -1;
-        }
-
-        boardID = atoi(argv[1]);
-
-    } else if (argc == 1) {
-
-        cout << "Ethernet Client Program!" << endl;
-        cout << "------------------------------" << endl;
-        cout << "Usage: " << argv[0] << " <boardID> [captureTime] " << endl;
-        cout << "where <captureTime> is an optional arg!" << endl;
-        cout << "[NOTE] Make sure to start the server before you start the client" << endl;
+    if (argc == 1) {  
+        cout << endl;
+        cout << "                 dVRK Data Collection Program" << endl;
+        cout << "|-----------------------------------------------------------------------" << endl;
+        cout << "|Usage: " << argv[0] << " <boardID> [-t <seconds>] [-i]" << endl;
+        cout << "|" <<endl;
+        cout << "|Arguments:" << endl;
+        cout << "|  <boardID>          Required. ID of the board to connect to." << endl;
+        cout << "|" << endl;
+        cout << "|Options:" << endl;
+        cout << "|  -t <seconds>       Optional. Duration for data capture in seconds." << endl;
+        cout << "|  -i                 Optional. Add PS IO to packet for data collection." << endl;
+        cout << "|" << endl;
+        cout << "|[NOTE] Ensure the server is started before running the client." << endl;
+        cout << "__________________________________________________________________________" << endl;
         return 0;
+    } 
 
+
+    if (!isInteger(argv[1])) {
+        cout << "[ERROR] Invalid boardID arg" << endl;
+        return -1;
     } else {
-        // invalid arg count
-        return -1; 
+        boardID = atoi(argv[1]);
+    }
+
+    if (argc >= 6){
+        cout << "[ERROR] To many cmd line args" << endl;
+        return -1;
+    }
+
+
+    if (argc >= 3){
+
+        for (int i = min_args + 1; i < argc; i++ ){
+
+            if (argv[i][0] == '-'){
+
+                if (argv[i][1] == 't'){
+
+                    if(!isInteger(argv[i+1])){
+                        cout << "[ERROR] invalid time value for timed capture. Pass in integer" << endl;
+                        return -1;
+                    } else {
+                        dataCollectionDuration = atoi(argv[i+1]);
+                        timedCaptureFlag = true;
+                        cout << "Timed Capture Enabled!" << endl;
+                        i+=1;
+                    }       
+                }
+
+                else if (argv[i][1] == 'i' ){
+                    use_ps_io_flag = true;
+                    cout << "PS IO pins will be included in data packet!" << endl;
+                } else {
+                    cout << "[ERROR] Not enough args" << endl;
+                }
+            } else {
+                cout << "[ERROR] invalid char" << endl;
+                return -1;
+            }            
+        }
     }
 
     int client_socket;
@@ -123,7 +154,7 @@ int main(int argc, char *argv[])
     DataCollection *DC = new DataCollection();
     bool stop_data_collection = false;
 
-    ret = DC->init(boardID);
+    ret = DC->init(boardID, use_ps_io_flag);
 
     if (!ret) {
         return -1;

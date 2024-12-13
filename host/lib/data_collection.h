@@ -31,7 +31,6 @@ class DataCollection {
         DataCollection(const DataCollection &);
         DataCollection& operator=(const DataCollection&);
 
-        // PK TEMP
         const unsigned long QLA1_String = 0x514C4131;
         const unsigned long dRA1_String = 0x64524131;
         const unsigned long DQLA_String = 0x44514C41;
@@ -55,6 +54,7 @@ class DataCollection {
             uint16_t motor_current[MAX_NUM_MOTORS];
             uint16_t motor_status[MAX_NUM_MOTORS];
             uint32_t digital_io;
+            uint32_t mio_pins;
         } proc_sample;
 
         struct DC_Time {
@@ -71,6 +71,8 @@ class DataCollection {
         DataCollectionMeta dc_meta;
 
         int sm_state;
+
+        bool use_ps_io = false;
 
         bool stop_data_collection_flag;
 
@@ -103,7 +105,7 @@ class DataCollection {
         pthread_t collect_data_t;
     public:
         DataCollection();
-        bool init(uint8_t boardID);
+        bool init(uint8_t boardID, bool usePSIO);
         bool start();
         bool stop();
         bool terminate();

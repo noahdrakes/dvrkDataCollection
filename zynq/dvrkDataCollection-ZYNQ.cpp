@@ -26,7 +26,7 @@ http://www.cisst.org/cisst/license.txt.
 #include <pthread.h>
 #include <atomic>
 
-// mmap contact detection circuit
+// mmap mio pins
 #include <stdio.h>
 #include <stdint.h>
 #include <fcntl.h>
@@ -52,14 +52,11 @@ const int UDP_MAX_PACKET_SIZE = UDP_REAL_MTU;
 const uint32_t GPIO_BASE_ADDR = 0xE000A000;
 const unsigned int GPIO_BANK1_OFFSET = 0x8;
 const uint32_t SCLR_CLK_BASE_ADDR = 0xF8000000;
-
-// USER DEFINES THIS HARDCODED MIO PIN # WHICH IS ROUTED FOR CONTACT DETECTIONS
-// PK: Instead of contact detection, always read all 4 MIO pins
-const unsigned int MIO_CONTACT_DETECTION_PIN = 37;
-
 volatile uint32_t *GPIO_MEM_REGION;
-float contacted_detected_timestamp; 
-bool contact_detected_flag = false; 
+
+// FLAG for including Processor IO in data packets
+bool use_ps_io_flag = false;
+
 
 // DEBUGGING VARIABLES 
 int data_packet_count = 0;
@@ -180,20 +177,17 @@ static int mio_mmap_init()
     return 0;
 }
 
-static bool isContactDetected(uint16_t MIO_PIN)
-{
+uint8_t returnMIOPins(){
+
     if (GPIO_MEM_REGION == NULL) {
         printf("[ERROR] MIO mmap region initialized incorrectly!\n");
         return false;
     }
 
-    if ((MIO_PIN < 34) || (MIO_PIN > 37)) {
-        printf("Invalid MIO PIN");
-        return false;
-    }
-
+    uint16_t MIO_PINS_MSK = 0x3C;
     uint32_t gpio_bank1 = GPIO_MEM_REGION[GPIO_BANK1_OFFSET/4];
-    return ((~gpio_bank1 & (1 << (MIO_PIN - 32))) >> (MIO_PIN - 32)) == 1;
+
+    return (gpio_bank1 & MIO_PINS_MSK) >> 2;
 }
 
 // checks if data is available from udp buffer (for noblocking udp recv)
@@ -285,13 +279,18 @@ static uint16_t calculate_quadlets_per_sample(uint8_t num_encoders, uint8_t num_
 
     // 1 quadlet = 4 bytes
 
-    // Timestamp (32 bit)                                                       [1 quadlet]
-    // Encoder Position (32 * num of encoders)                                  [1 quadlet * num of encoders]
-    // Encoder Velocity Predicted (64 * num of encoders -> truncated to 32bits) [1 quadlet * num of encoders]
-    // Motur Current and Motor Status (32 * num of Motors -> each are 16 bits)  [1 quadlet * num of motors]
-    // Digtial IO Values                                                        [1 quadlet * digital IO]
-
-    return (1 + 1 + (2*(num_encoders)) + (num_motors));
+    // Timestamp (32 bit)                                                                   [1 quadlet]
+    // Encoder Position (32 * num of encoders)                                              [1 quadlet * num of encoders]
+    // Encoder Velocity Predicted (64 * num of encoders -> truncated to 32bits)             [1 quadlet * num of encoders]
+    // Motur Current and Motor Status (32 * num of Motors -> each are 16 bits)              [1 quadlet * num of motors]
+    // Digtial IO Values  (optional, used if PS IO is enabled ) 32 bits         [1 quadlet * digital IO]
+    // MIO Pins (optional, used if PS IO is enabled ) 4 bits -> pad 32 bits     [1 quadlet * MIO PINS]                  
+    if (use_ps_io_flag){
+        return (1 + 1 + 1 + (2*(num_encoders)) + (num_motors));
+    } else {
+        return (1 + (2*(num_encoders)) + (num_motors));
+    }
+    
 }
 
 // calculates the # of samples per packet in quadlets
@@ -334,16 +333,8 @@ static bool load_data_packet(BasePort *Port, AmpIO *Board, uint32_t *data_packet
     // CAPTURE DATA 
     for (int i = 0; i < samples_per_packet; i++) {
 
-        if ((!contact_detected_flag) && isContactDetected(MIO_CONTACT_DETECTION_PIN)) {
-            contact_detected_flag = true;
-        }
-
         while(!Port->ReadAllBoards()) {
             emio_read_error_counter++;
-        }
-
-        if ((!contact_detected_flag) && isContactDetected(MIO_CONTACT_DETECTION_PIN)) {
-            contact_detected_flag = true;
         }
 
         if (!Board->ValidRead()) {
@@ -379,29 +370,27 @@ static bool load_data_packet(BasePort *Port, AmpIO *Board, uint32_t *data_packet
             data_packet[count++] = (uint32_t)(((motor_status & 0x0000FFFF) << 16) | (motor_curr & 0x0000FFFF));
         }
 
-        data_packet[count++] = Board->ReadDigitalIO();
-
-        if (contact_detected_flag && (contacted_detected_timestamp == 0)) {
-            contacted_detected_timestamp = last_timestamp;
-            printf("Contact Detected at %fs\n", contacted_detected_timestamp);
+        if (use_ps_io_flag){
+            data_packet[count++] = Board->ReadDigitalIO();
+            data_packet[count++] = (uint32_t) returnMIOPins();
         }
-
+        
         sample_count++;
     }
+
     return true;    
 }
 
-void package_meta_data(DataCollectionMeta *dc_meta, Double_Buffer_Info *db, AmpIO *board)
+void package_meta_data(DataCollectionMeta *dc_meta, AmpIO *board)
 {
     uint8_t num_encoders = (uint8_t) board->GetNumEncoders();
     uint8_t num_motors = (uint8_t) board->GetNumMotors();
 
-    // dc_meta->magic_number = METADATA_MAGIC_NUMBER; // metadata magic word
     dc_meta->hwvers = board->GetHardwareVersion();
     dc_meta->num_encoders = (uint32_t) num_encoders;
     dc_meta->num_motors = (uint32_t) num_motors;
 
-    dc_meta->data_packet_size = (uint32_t) db->buffer_size; 
+    dc_meta->data_packet_size = (uint32_t)calculate_quadlets_per_packet(num_encoders, num_motors) * 4;
     dc_meta->size_of_sample = (uint32_t) calculate_quadlets_per_sample(num_encoders, num_motors);
     dc_meta->samples_per_packet = (uint32_t) calculate_samples_per_packet(num_encoders, num_motors);
 }
@@ -446,13 +435,13 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board)
 
     Double_Buffer_Info db;
     reset_double_buffer_info(&db, board);
-
+    
     if (mio_mmap_init() != 0) {
         state = SM_CLOSE_SOCKET;
         ret_code = SM_FAIL;
     }
 
-    char recvBuffer[100] = {0};
+    char recvBuffer[MAX_CMD_STRING_SIZE] = {0};
 
     int ret;
     char recv_buffer[29];
@@ -472,13 +461,28 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board)
 
             case SM_WAIT_FOR_HOST_HANDSHAKE:
 
-                memset(recvBuffer, 0, 100);
-                ret_code = udp_nonblocking_receive(&udp_host, recvBuffer, 100);
+                memset(recvBuffer, 0, MAX_CMD_STRING_SIZE);
+                ret_code = udp_nonblocking_receive(&udp_host, recvBuffer, MAX_CMD_STRING_SIZE);
 
                 if (ret_code > 0) {
                     if (strcmp(recvBuffer,  HOST_READY_CMD) == 0) {
                         cout << "Received Message - " <<  HOST_READY_CMD << endl;
                         state = SM_SEND_DATA_COLLECTION_METADATA;
+                    }                    
+                    
+                    else if (strcmp(recvBuffer, HOST_READY_CMD_W_PS_IO) == 0){
+                        cout << "Received Message - " <<  HOST_READY_CMD_W_PS_IO << endl;
+                        use_ps_io_flag = true;
+
+                        // special case: need to resize double_buffer size to account
+                        // for extra ps io data
+                        reset_double_buffer_info(&db, board); 
+                        state = SM_SEND_DATA_COLLECTION_METADATA;
+                    }
+
+                    else {
+                        cout << "WRONG MESSAGES: " <<  recvBuffer << endl;
+                        state = SM_CLOSE_SOCKET;
                     }
                 }
                 else if (ret_code == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT || ret_code == UDP_NON_UDP_DATA_IS_AVAILABLE) {
@@ -492,7 +496,7 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board)
 
             case SM_SEND_DATA_COLLECTION_METADATA:
 
-                package_meta_data(&data_collection_meta, &db, board);
+                package_meta_data(&data_collection_meta, board);
 
                 if (udp_transmit(&udp_host,  &data_collection_meta, sizeof(struct DataCollectionMeta )) < 1 ) {
                     perror("udp transmit fail");
@@ -507,8 +511,8 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board)
 
             case SM_WAIT_FOR_HOST_RECV_METADATA:
 
-                memset(recvBuffer, 0, 100);
-                ret_code = udp_nonblocking_receive(&udp_host, recvBuffer, 100);
+                memset(recvBuffer, 0, MAX_CMD_STRING_SIZE);
+                ret_code = udp_nonblocking_receive(&udp_host, recvBuffer, MAX_CMD_STRING_SIZE);
 
                 if (ret_code > 0) {
                     if (strcmp(recvBuffer, HOST_RECVD_METADATA) == 0) {
@@ -545,11 +549,11 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board)
 
             case SM_WAIT_FOR_HOST_START_CMD:
 
-                memset(recvBuffer, 0, 100);
-                ret_code = udp_nonblocking_receive(&udp_host, recvBuffer, 100);
+                memset(recvBuffer, 0, MAX_CMD_STRING_SIZE);
+                ret_code = udp_nonblocking_receive(&udp_host, recvBuffer, MAX_CMD_STRING_SIZE);
 
                 if (ret_code > 0) {
-                    if (strcmp(recvBuffer, "HOST: START DATA COLLECTION") == 0) {
+                    if (strcmp(recvBuffer, HOST_START_DATA_COLLECTION) == 0) {
                         cout << "Received Message from Host: START DATA COLLECTION" << endl;
                         state = SM_START_DATA_COLLECTION;
                     }
@@ -623,12 +627,6 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board)
                         pthread_join(consumer_t, nullptr);
 
                         printf("------------------------------------------------\n");
-                        printf("CONTACT DETECTED: ");
-                        if (contact_detected_flag){
-                            printf("%f\n", contacted_detected_timestamp);
-                        } else {
-                            printf("NONE\n");
-                        }
                         printf("UDP DATA PACKETS SENT TO HOST: %d\n", data_packet_count);
                         printf("SAMPLES SENT TO HOST: %d\n", sample_count);
                         printf("EMIO ERROR COUNT: %d", emio_read_error_counter);
@@ -637,9 +635,6 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board)
                         emio_read_error_counter = 0; 
                         data_packet_count = 0;
                         sample_count = 0;
-
-                        contact_detected_flag = false; 
-                        contacted_detected_timestamp = 0;
 
                         state = SM_WAIT_FOR_HOST_START_CMD;
                         printf("Waiting for command from host...\n");
