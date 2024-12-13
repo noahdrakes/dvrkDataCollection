@@ -70,11 +70,7 @@ int32_t emio_read_error_counter = 0;
 std::chrono::time_point<std::chrono::high_resolution_clock> start_time;
 std::chrono::time_point<std::chrono::high_resolution_clock> end_time;
 
-std::chrono::time_point<std::chrono::high_resolution_clock> start;
-std::chrono::time_point<std::chrono::high_resolution_clock> end_t;
-
-float last_timestamp;
-
+// FLAG set when the host terminates data collection
 bool stop_data_collection_flag = false;
 
 // State Machine states
@@ -91,7 +87,7 @@ enum DataCollectionStateMachine {
     SM_WAIT_FOR_HOST_RECV_METADATA,
     SM_PRODUCE_DATA,
     SM_CONSUME_DATA,
-    SM_CLOSE_SOCKET,
+    SM_TERMINATE,
     SM_EXIT
 };
 
@@ -113,12 +109,14 @@ struct UDP_Info {
 } udp_host; // this is global bc there will only be one
 
 
+// Double Buffer Struct handling double buffer between collecting and transmitting data between 
+// threads
 struct Double_Buffer_Info {
     uint32_t double_buffer[2][UDP_MAX_PACKET_SIZE/4]; //note: changed from 1500 which makes sense
     uint16_t buffer_size; 
     uint8_t prod_buf;
     uint8_t cons_buf;
-    atomic_uint8_t cons_busy; // TODO: change name 
+    atomic_uint8_t cons_busy; 
 };
 
 
@@ -181,7 +179,7 @@ uint8_t returnMIOPins(){
 
     if (GPIO_MEM_REGION == NULL) {
         printf("[ERROR] MIO mmap region initialized incorrectly!\n");
-        return false;
+        return 0;
     }
 
     uint16_t MIO_PINS_MSK = 0x3C;
@@ -233,7 +231,7 @@ int udp_nonblocking_receive(UDP_Info *udp_host, void *data, int size)
 // udp transmit function. wrapper for sendo that abstracts the UDP_Info_struct
 static int udp_transmit(UDP_Info *udp_host, void * data, int size)
 {
-    // change UDP_MAX_QUADLET to 
+
     if (size > UDP_MAX_PACKET_SIZE) {
         return -1;
     }
@@ -279,12 +277,12 @@ static uint16_t calculate_quadlets_per_sample(uint8_t num_encoders, uint8_t num_
 
     // 1 quadlet = 4 bytes
 
-    // Timestamp (32 bit)                                                                   [1 quadlet]
-    // Encoder Position (32 * num of encoders)                                              [1 quadlet * num of encoders]
-    // Encoder Velocity Predicted (64 * num of encoders -> truncated to 32bits)             [1 quadlet * num of encoders]
-    // Motur Current and Motor Status (32 * num of Motors -> each are 16 bits)              [1 quadlet * num of motors]
-    // Digtial IO Values  (optional, used if PS IO is enabled ) 32 bits         [1 quadlet * digital IO]
-    // MIO Pins (optional, used if PS IO is enabled ) 4 bits -> pad 32 bits     [1 quadlet * MIO PINS]                  
+    // Timestamp (32 bit)                                                           [1 quadlet]
+    // Encoder Position (32 * num of encoders)                                      [1 quadlet * num of encoders]
+    // Encoder Velocity Predicted (64 * num of encoders -> truncated to 32bits)     [1 quadlet * num of encoders]
+    // Motur Current and Motor Status (32 * num of Motors -> each are 16 bits)      [1 quadlet * num of motors]
+    // Digtial IO Values  (optional, used if PS IO is enabled ) 32 bits             [1 quadlet * digital IO]
+    // MIO Pins (optional, used if PS IO is enabled ) 4 bits -> pad 32 bits         [1 quadlet * MIO PINS]                  
     if (use_ps_io_flag){
         return (1 + 1 + 1 + (2*(num_encoders)) + (num_motors));
     } else {
@@ -344,10 +342,7 @@ static bool load_data_packet(BasePort *Port, AmpIO *Board, uint32_t *data_packet
 
         // DATA 1: timestamp
         end_time = std::chrono::high_resolution_clock::now();
-
         float time_elapsed = convert_chrono_duration_to_float(start_time, end_time);
-
-        last_timestamp = time_elapsed;
 
         data_packet[count++] = *reinterpret_cast<uint32_t *> (&time_elapsed);
 
@@ -430,21 +425,25 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board)
     cout << "Starting Handshake Routine..." << endl << endl;
     cout << "Start Data Collection Client on HOST to complete handshake..." << endl;
 
-    int ret_code = 0;
+    // RETURN CODES
+    // state machine return code
+    int sm_ret = 0;
+    // udp return code
+    int udp_ret;
+
+    // state status 
     int state = 0;
+    int last_state = 0;
 
     Double_Buffer_Info db;
     reset_double_buffer_info(&db, board);
     
     if (mio_mmap_init() != 0) {
-        state = SM_CLOSE_SOCKET;
-        ret_code = SM_FAIL;
+        state = SM_TERMINATE;
+        sm_ret = SM_PS_IO_FAIL;
     }
 
-    char recvBuffer[MAX_CMD_STRING_SIZE] = {0};
-
-    int ret;
-    char recv_buffer[29];
+    char recvdCMD[CMD_MAX_STRING_SIZE] = {0};
 
     struct DataCollectionMeta data_collection_meta;
 
@@ -461,16 +460,16 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board)
 
             case SM_WAIT_FOR_HOST_HANDSHAKE:
 
-                memset(recvBuffer, 0, MAX_CMD_STRING_SIZE);
-                ret_code = udp_nonblocking_receive(&udp_host, recvBuffer, MAX_CMD_STRING_SIZE);
+                memset(recvdCMD, 0, CMD_MAX_STRING_SIZE);
+                udp_ret = udp_nonblocking_receive(&udp_host, recvdCMD, CMD_MAX_STRING_SIZE);
 
-                if (ret_code > 0) {
-                    if (strcmp(recvBuffer,  HOST_READY_CMD) == 0) {
+                if (udp_ret > 0) {
+                    if (strcmp(recvdCMD,  HOST_READY_CMD) == 0) {
                         cout << "Received Message - " <<  HOST_READY_CMD << endl;
                         state = SM_SEND_DATA_COLLECTION_METADATA;
                     }                    
                     
-                    else if (strcmp(recvBuffer, HOST_READY_CMD_W_PS_IO) == 0){
+                    else if (strcmp(recvdCMD, HOST_READY_CMD_W_PS_IO) == 0){
                         cout << "Received Message - " <<  HOST_READY_CMD_W_PS_IO << endl;
                         use_ps_io_flag = true;
 
@@ -481,16 +480,18 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board)
                     }
 
                     else {
-                        cout << "WRONG MESSAGES: " <<  recvBuffer << endl;
-                        state = SM_CLOSE_SOCKET;
+                        sm_ret = SM_OUT_OF_SYNC;
+                        last_state = state;
+                        state = SM_TERMINATE;
                     }
                 }
-                else if (ret_code == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT || ret_code == UDP_NON_UDP_DATA_IS_AVAILABLE) {
+                else if (udp_ret == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT || udp_ret == UDP_NON_UDP_DATA_IS_AVAILABLE) {
                     state = SM_WAIT_FOR_HOST_HANDSHAKE;
                 }
                 else {
-                    ret_code = SM_UDP_ERROR;
-                    state = SM_CLOSE_SOCKET;
+                    sm_ret = SM_UDP_ERROR;
+                    last_state = state;
+                    state = SM_TERMINATE;
                 }
                 break;
 
@@ -499,10 +500,8 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board)
                 package_meta_data(&data_collection_meta, board);
 
                 if (udp_transmit(&udp_host,  &data_collection_meta, sizeof(struct DataCollectionMeta )) < 1 ) {
-                    perror("udp transmit fail");
-                    cout << "client addr is invalid." << endl;
-                    ret_code = SM_UDP_ERROR;
-                    state = SM_CLOSE_SOCKET;
+                    sm_ret = SM_UDP_INVALID_HOST_ADDR;
+                    state = SM_TERMINATE;
                 }
                 else {
                     state = SM_WAIT_FOR_HOST_RECV_METADATA;
@@ -511,84 +510,84 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board)
 
             case SM_WAIT_FOR_HOST_RECV_METADATA:
 
-                memset(recvBuffer, 0, MAX_CMD_STRING_SIZE);
-                ret_code = udp_nonblocking_receive(&udp_host, recvBuffer, MAX_CMD_STRING_SIZE);
+                memset(recvdCMD, 0, CMD_MAX_STRING_SIZE);
+                udp_ret = udp_nonblocking_receive(&udp_host, recvdCMD, CMD_MAX_STRING_SIZE);
 
-                if (ret_code > 0) {
-                    if (strcmp(recvBuffer, HOST_RECVD_METADATA) == 0) {
+                if (udp_ret > 0) {
+                    if (strcmp(recvdCMD, HOST_RECVD_METADATA) == 0) {
                         cout << "Received Message: " << HOST_RECVD_METADATA << endl;
                         cout << "Handshake Complete!" << endl;
 
                         state = SM_SEND_READY_STATE_TO_HOST;
                     } else {
-                        state = SM_WAIT_FOR_HOST_RECV_METADATA;
+                        sm_ret = SM_OUT_OF_SYNC;
+                        last_state = state;
+                        state = SM_TERMINATE;
                     }
                 }
-                else if (ret_code == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT || ret_code == UDP_NON_UDP_DATA_IS_AVAILABLE) {
+                else if (udp_ret == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT || udp_ret == UDP_NON_UDP_DATA_IS_AVAILABLE) {
                     // Stay in same state
                     state = SM_WAIT_FOR_HOST_RECV_METADATA;
                 } else {
-                    ret_code = SM_UDP_ERROR;
-                    state = SM_CLOSE_SOCKET;
+                    sm_ret = SM_UDP_ERROR;
+                    last_state = state;
+                    state = SM_TERMINATE;
                 }
                 break;
 
             case SM_SEND_READY_STATE_TO_HOST:
 
                 if (udp_transmit(&udp_host,  (char *) ZYNQ_READY_CMD, sizeof(ZYNQ_READY_CMD)) < 1 ) {
-                    perror("sendto failed");
-                    cout << "[ERROR UDP] client addr is invalid." << endl;
-                    ret_code = SM_UDP_ERROR;
-                    state = SM_CLOSE_SOCKET;
+                    sm_ret = SM_UDP_INVALID_HOST_ADDR;
+                    state = SM_TERMINATE;
                 }
                 else {
-                    cout << endl << "Waiting for Host to start data collection..." << endl << endl;
                     state = SM_WAIT_FOR_HOST_START_CMD;
+                    cout << endl << "Waiting for Host to start data collection..." << endl << endl;
                 }
                 break;
 
             case SM_WAIT_FOR_HOST_START_CMD:
 
-                memset(recvBuffer, 0, MAX_CMD_STRING_SIZE);
-                ret_code = udp_nonblocking_receive(&udp_host, recvBuffer, MAX_CMD_STRING_SIZE);
+                memset(recvdCMD, 0, CMD_MAX_STRING_SIZE);
+                udp_ret = udp_nonblocking_receive(&udp_host, recvdCMD, CMD_MAX_STRING_SIZE);
 
-                if (ret_code > 0) {
-                    if (strcmp(recvBuffer, HOST_START_DATA_COLLECTION) == 0) {
-                        cout << "Received Message from Host: START DATA COLLECTION" << endl;
+                if (udp_ret > 0) {
+                    if (strcmp(recvdCMD, HOST_START_DATA_COLLECTION) == 0) {
+                        cout << "Received Message: " <<  recvdCMD << endl;
                         state = SM_START_DATA_COLLECTION;
                     }
-                    else if (strcmp(recvBuffer, "CLIENT: Terminate Server") == 0) {
-                        ret_code = SM_SUCCESS;
-                        state = SM_CLOSE_SOCKET;
+                    else if (strcmp(recvdCMD, HOST_TERMINATE_SERVER) == 0) {
+                        cout << "Received Message: " <<  recvdCMD << endl;
+                        sm_ret = SM_SUCCESS;
+                        state = SM_TERMINATE;
                     }
                     else {
-                        cout << "recv Buffer: " << recvBuffer << endl;
-                        cout << "INVALID ENTRY" << endl;
-                        state = SM_CLOSE_SOCKET;
+                        sm_ret = SM_OUT_OF_SYNC;
+                        last_state = state;
+                        state = SM_TERMINATE;
                     }
                 }
-                else if (ret_code == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT || ret_code == UDP_NON_UDP_DATA_IS_AVAILABLE) {
-                    // Stay in same state
+                else if (udp_ret == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT || udp_ret == UDP_NON_UDP_DATA_IS_AVAILABLE) {
                     state = SM_WAIT_FOR_HOST_START_CMD;
-
                 }
                 else {
-                    // UDP error
-                    ret_code = SM_UDP_ERROR;
-                    state = SM_CLOSE_SOCKET;
+                    sm_ret = SM_UDP_ERROR;
+                    last_state = state;
+                    state = SM_TERMINATE;
                 }
                 break;
 
             case SM_START_DATA_COLLECTION:
 
                 stop_data_collection_flag = false;
-                // set start time for data collection
                 start_time = std::chrono::high_resolution_clock::now();
                 state = SM_START_CONSUMER_THREAD;
                 break;
 
             case SM_START_CONSUMER_THREAD:
 
+                // Starting Consumer Thread: sends packets to host
                 if (pthread_create(&consumer_t, nullptr, consume_data, &db) != 0) {
                     std::cerr << "Error creating consumer thread" << std::endl;
                     return 1;
@@ -616,10 +615,10 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board)
 
             case SM_CHECK_FOR_STOP_DATA_COLLECTION_CMD:
 
-                ret = udp_nonblocking_receive(&udp_host, recv_buffer, 29);
+                udp_ret = udp_nonblocking_receive(&udp_host, recvdCMD, CMD_MAX_STRING_SIZE);
 
-                if (ret > 0) {
-                    if (strcmp(recv_buffer, "HOST: STOP DATA COLLECTION") == 0) {
+                if (udp_ret > 0) {
+                    if (strcmp(recvdCMD, HOST_STOP_DATA_COLLECTION) == 0) {
                         cout << "Message from Host: STOP DATA COLLECTION" << endl;
 
                         stop_data_collection_flag = true;
@@ -640,35 +639,53 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board)
                         printf("Waiting for command from host...\n");
                         
                     } else {
-                        // something went terribly wrong
-                        cout << "[error] unexpected UDP message. Host and Processor are out of sync" << endl;
-                        cout << "message: " << recv_buffer << endl;
-                        ret_code = SM_UDP_ERROR;
-                        state = SM_CLOSE_SOCKET;
+                        sm_ret = SM_OUT_OF_SYNC;
+                        last_state = state;
+                        state = SM_TERMINATE;
                     }
-                } else if (ret == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT || ret_code == UDP_NON_UDP_DATA_IS_AVAILABLE){
+                } else if (udp_ret == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT || udp_ret == UDP_NON_UDP_DATA_IS_AVAILABLE){
                     state = SM_PRODUCE_DATA;
                 } else {
-                    cout << "else" << endl;
+                    sm_ret = SM_UDP_ERROR;
+                    last_state = state;
+                    state = SM_TERMINATE;
                 }
                 break;
 
-            case SM_CLOSE_SOCKET:
-                if (ret_code != SM_SUCCESS) {
-                    cout << "[UDP_ERROR] - return code: " << ret_code
-                         << " | Make sure that server application is executing on the processor! The udp connection may closed." << endl;
-                } 
+            case SM_TERMINATE:
+                if (sm_ret != SM_SUCCESS) {
+                    // Print out error messages
+                    cout << "[ERROR] STATEMACHINE TERMINATING" << endl;
+
+                    cout << "At STATE " << last_state << " ";
+
+                    switch (sm_ret){
+                        
+                        case SM_OUT_OF_SYNC:
+                            cout << "Zynq of sync with Host. Recieved unexpected command: " << recvdCMD << endl;
+                            break;
+                        case SM_UDP_ERROR:
+                            cout << "Udp ERROR. Make sure host program is running." << endl;
+                            break;
+                        case SM_UDP_INVALID_HOST_ADDR:
+                            cout << "Udp ERROR. Invalid Host Address format" << endl;
+                            break;
+                    }
+
+                } else {
+                    cout << "STATE MACHINE SUCCESS !" << endl;
+                }
 
                 cout << endl << ZYNQ_TERMINATATION_SUCCESSFUL << endl;
 
-                udp_transmit(&udp_host,  (void*) ZYNQ_TERMINATATION_SUCCESSFUL, 31);
+                udp_transmit(&udp_host,  (void*) ZYNQ_TERMINATATION_SUCCESSFUL, sizeof(ZYNQ_TERMINATATION_SUCCESSFUL));
 
                 close(udp_host.socket);
                 state = SM_EXIT;
                 break;
         }
     }
-    return SM_SUCCESS;
+    return sm_ret;
 }
 
 
@@ -708,8 +725,6 @@ int main()
         cout << "[error] failed to establish socket connection !!" << endl;
         return -1;
     }
-
-    cout << "NEW MACHINE" << endl;
 
     dataCollectionStateMachine(Port, Board);
 
