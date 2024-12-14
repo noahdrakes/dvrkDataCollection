@@ -454,7 +454,11 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board)
 
     state = SM_WAIT_FOR_HOST_HANDSHAKE;
 
+<<<<<<< Updated upstream:zynq/dvrkDataCollection-ZYNQ.cpp
     while (state != SM_EXIT) {
+=======
+    while(state != SM_EXIT){      
+>>>>>>> Stashed changes:zynq/src/dvrkDataCollection-ZYNQ.cpp
 
         switch (state) {
 
