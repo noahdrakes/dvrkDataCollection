@@ -102,7 +102,6 @@ int main(int argc, char *argv[])
         return 0;
     } 
 
-
     if (!isInteger(argv[1])) {
         cout << "[ERROR] Invalid boardID arg" << endl;
         return -1;
@@ -114,7 +113,6 @@ int main(int argc, char *argv[])
         cout << "[ERROR] To many cmd line args" << endl;
         return -1;
     }
-
 
     if (argc >= 3){
 
@@ -148,15 +146,12 @@ int main(int argc, char *argv[])
         }
     }
 
-    int client_socket;
     bool ret;
 
     DataCollection *DC = new DataCollection();
     bool stop_data_collection = false;
 
-    ret = DC->init(boardID, use_ps_io_flag);
-
-    if (!ret) {
+    if (!DC->init(boardID, use_ps_io_flag)) {
         return -1;
     }
 
@@ -182,12 +177,10 @@ int main(int argc, char *argv[])
 
         cout << endl;
     
-        ret = DC->start();
-        printf("...Press [ENTER] to terminate capture\n");
-
-        if (!ret) {
+        if (!DC->start()) {
             return -1;
         }
+        printf("...Press [ENTER] to terminate capture\n");
 
         if (timedCaptureFlag) {
             sleep(dataCollectionDuration);
@@ -199,9 +192,7 @@ int main(int argc, char *argv[])
             }
         }
 
-        ret = DC->stop();
-
-        if (!ret) {
+        if (!DC->stop()) {
             return -1;
         }
 

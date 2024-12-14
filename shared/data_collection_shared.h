@@ -40,7 +40,7 @@ const unsigned int UDP_REAL_MTU = 1446;
 const unsigned int UDP_MAX_QUADLET_PER_PACKET = UDP_REAL_MTU/4;
 
 // Arbitrary, used as a const for consistency. Can be changed later
-const unsigned int MAX_CMD_STRING_SIZE = 100;
+const unsigned int CMD_MAX_STRING_SIZE = 100;
 
 struct DataCollectionMeta {
     uint32_t hwvers;
@@ -59,6 +59,9 @@ enum StateMachineReturnCodes {
     SM_ZYNQ_FAIL,
     SM_HOST_FAIL,
     SM_CAPTURE_TIMEOUT,
+    SM_PS_IO_FAIL,
+    SM_OUT_OF_SYNC,
+    SM_UDP_INVALID_HOST_ADDR,
     SM_FAIL
 };
 
@@ -69,6 +72,7 @@ enum StateMachineReturnCodes {
     #define HOST_READY_CMD_W_PS_IO                          "HOST: READY FOR DATA COLLECTION - WITH PS IO"
     #define HOST_RECVD_METADATA                             "HOST: RECEIVED METADATA"
     #define HOST_STOP_DATA_COLLECTION                       "HOST: STOP DATA COLLECTION"
+    #define HOST_TERMINATE_SERVER                           "HOST: TERMINATE SERVER"
     // ZYNQ
     #define ZYNQ_READY_CMD                                  "ZYNQ: READY FOR DATA COLLECTION"
     #define ZYNQ_TERMINATATION_SUCCESSFUL                   "ZYNQ: TERMINATION SUCCESSFUL"
