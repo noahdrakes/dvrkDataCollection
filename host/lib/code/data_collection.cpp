@@ -444,7 +444,7 @@ bool DataCollection :: terminate()
     char terminateClientAndServerCmd[] = "CLIENT: Terminate Server";
     char recvBuffer[100] = {0};
 
-    if (!udp_transmit(sock_id, terminateClientAndServerCmd, sizeof(terminateClientAndServerCmd))) {
+    if (!udp_transmit(sock_id, (char *) HOST_TERMINATE_SERVER, sizeof(HOST_TERMINATE_SERVER))) {
         cout << "[ERROR]: UDP error. check connection with host!" << endl;
     }
 

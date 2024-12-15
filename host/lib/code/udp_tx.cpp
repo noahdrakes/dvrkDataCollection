@@ -33,6 +33,7 @@ bool udp_init(int *client_socket, uint8_t boardId)
     char ipAddress[14] = "169.254.10.";
 
     if (boardId > 15) {
+        std::cout << "[ERROR] invalid BoardID! Range [0,15]" << std::endl;
         return false; 
     }
 
