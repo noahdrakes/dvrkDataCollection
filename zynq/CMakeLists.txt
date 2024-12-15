@@ -43,10 +43,10 @@ if (Amp1394_HAS_EMIO)
 
   link_directories(${Amp1394_LIBRARY_DIR})
 
-  add_executable(dvrkDataCollection-ZYNQ dvrkDataCollection-ZYNQ.cpp)
-  target_link_libraries(dvrkDataCollection-ZYNQ ${Amp1394_LIBRARIES})
+  add_executable(dvrk-data-collection-zynq dvrkDataCollection-ZYNQ.cpp)
+  target_link_libraries(dvrk-data-collection-zynq ${Amp1394_LIBRARIES})
 
-  install (TARGETS dvrkDataCollection-ZYNQ
+  install (TARGETS dvrk-data-collection-zynq
            RUNTIME DESTINATION bin)
 
 else ()

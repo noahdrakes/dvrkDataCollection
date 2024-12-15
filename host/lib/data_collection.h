@@ -44,6 +44,8 @@ class DataCollection {
             SM_RECV_DATA_COLLECTION_META_DATA,
             SM_SEND_METADATA_RECV,
             SM_CLOSE_SOCKET,
+            SM_EXIT_DATA_COLLECTION,
+            SM_FORCE_TERMINATE,
             SM_EXIT
         };
 
@@ -63,7 +65,6 @@ class DataCollection {
             float elapsed;
         } curr_time;
 
-        // time variables for timed captures
         std::chrono::time_point<std::chrono::high_resolution_clock> start_time;
         std::chrono::time_point<std::chrono::high_resolution_clock> end_time;
         float time_elapsed;
@@ -94,13 +95,17 @@ class DataCollection {
 
         uint32_t data_packet[UDP_MAX_QUADLET_PER_PACKET] = {0};
 
-        int collect_data();
-
         void load_meta_data(uint32_t *meta_data);
-
-        // processes sample and uploads it to the
-        // proc sample struct
+        
+        // DATA COLLECTION UTILITY METHODS
+        int collect_data();
         void process_sample(uint32_t *data_packet, int start_idx);
+        void handle_data_collection(void);
+        void write_csv_headers(void);
+        void process_and_write_data(void);
+        void handle_packet_timeout(void);
+        void handle_udp_error(int ret_code);
+        void handle_socket_closure(void);
 
         pthread_t collect_data_t;
     public:

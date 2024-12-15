@@ -82,8 +82,6 @@ int main(int argc, char *argv[])
     // cmd line variables
     uint8_t min_args = 1;
 
-    //cleaner cmd line args
-
     if (argc == 1) {  
         cout << endl;
         cout << "                 dVRK Data Collection Program" << endl;
@@ -188,7 +186,7 @@ int main(int argc, char *argv[])
             while(1) {
                 if (isExitKeyPressed()) {
                     break;
-                }
+                } 
             }
         }
 
@@ -201,5 +199,5 @@ int main(int argc, char *argv[])
 
     ret = DC->terminate();
 
-    return 0;
+    return ret;
 }

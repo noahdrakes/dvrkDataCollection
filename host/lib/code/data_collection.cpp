@@ -117,8 +117,7 @@ void DataCollection:: process_sample(uint32_t *data_packet, int start_idx)
     
 }
 
-int DataCollection :: collect_data()
-{
+int DataCollection::collect_data() {
     if (isDataCollectionRunning) {
         collect_data_ret = false;
         return false;
@@ -128,148 +127,142 @@ int DataCollection :: collect_data()
 
     isDataCollectionRunning = true;
     stop_data_collection_flag = false;
-
     sm_state = SM_SEND_START_DATA_COLLECTIION_CMD_TO_PS;
 
-    while(sm_state != SM_EXIT) {
-
-        switch(sm_state){
+    while (sm_state != SM_EXIT) {
+        switch (sm_state) {
             case SM_SEND_START_DATA_COLLECTIION_CMD_TO_PS:
-          
-                udp_transmit(sock_id, (char *) HOST_START_DATA_COLLECTION, sizeof(HOST_START_DATA_COLLECTION));
-                
+                udp_transmit(sock_id, (char *)HOST_START_DATA_COLLECTION, sizeof(HOST_START_DATA_COLLECTION));
                 sm_state = SM_START_DATA_COLLECTION;
                 break;
 
-            case SM_START_DATA_COLLECTION:{
-                curr_time.start = std::chrono::high_resolution_clock::now();
-                float time_elapsed = 0; 
-                int count = 0;
-
-                udp_data_packets_recvd_count = 0;
-                
-                filename = return_filename(filename);
-                myFile.open(filename);
-        
-                memset(data_packet, 0, sizeof(data_packet));
-
-                myFile << "TIMESTAMP,";
-
-                for (int i = 1; i < dc_meta.num_encoders + 1; i++) {
-                    myFile << "ENCODER_POS_" << i << ",";
-                }
-
-                for (int i = 1; i < dc_meta.num_encoders + 1; i++) {
-                    myFile << "ENCODER_VEL_" << i << ",";
-                }
-
-                for (int i = 1; i < dc_meta.num_motors + 1; i++) {
-                    myFile << "MOTOR_CURRENT_" << i << ",";
-                }
-
-                for (int i = 1; i < dc_meta.num_motors + 1; i++) {
-                    myFile << "MOTOR_STATUS_" << i;
-
-                    if (i < dc_meta.num_motors){
-                        myFile << ",";
-                    }
-                }
-
-                if (use_ps_io){
-                    myFile << ",DIGITAL_IO,MIO_PINS";
-                }
-
-                myFile << endl;
-                
-
-                while (!stop_data_collection_flag) {
-
-                    // look here maybe
-                    int ret_code = udp_nonblocking_receive(sock_id, data_packet, dc_meta.data_packet_size);
-
-                    if (ret_code > 0) {
-
-                        udp_data_packets_recvd_count++;
-                        packet_misses_counter = 0;
-
-                            count++;
-
-                            for (int i = 0; i < dc_meta.data_packet_size / 4 ; i+= dc_meta.size_of_sample) {
-
-                                process_sample(data_packet, i);
-                                myFile << proc_sample.timestamp << ",";
-
-                                for (int j = 0; j < dc_meta.num_encoders; j++) {
-                                    myFile << proc_sample.encoder_position[j] << ",";
-                                }
-
-                                for (int j = 0; j < dc_meta.num_encoders; j++) {
-                                    myFile << proc_sample.encoder_velocity[j] << ",";
-                                }
-
-                                for (int j = 0; j < dc_meta.num_motors; j++) {
-                                    myFile << proc_sample.motor_current[j] << ",";
-                                }
-
-                                if (dc_meta.hwvers == dRA1_String) {
-                                    // SPECIAL CASE: DRAC motor_status is a signed value; expect to
-                                    // change this in the near future
-                                    int16_t tmp;
-                                    for (int j = 0; j < dc_meta.num_motors; j++) {
-                                        tmp = static_cast<int16_t>(proc_sample.motor_status[j]);
-                                        myFile << tmp;
-
-                                        if (j < dc_meta.num_motors - 1){
-                                            myFile << ",";
-                                        }
-                                    }
-                                }
-                                else {
-                                    for (int j = 0; j < dc_meta.num_motors; j++) {
-                                        myFile << proc_sample.motor_status[j];
-
-                                        if (j < dc_meta.num_motors - 1){
-                                            myFile << ",";
-                                        }
-                                    }
-                                }
-
-                                if (use_ps_io){
-                                    myFile << "," << proc_sample.digital_io;
-                                    myFile << "," << proc_sample.mio_pins;
-                                }
-
-                                myFile << endl;
-                                
-
-                                memset(&proc_sample, 0, sizeof(proc_sample));
-
-                            }
-                    } else if (ret_code == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT) {
-                        packet_misses_counter++;
-
-                        if ((packet_misses_counter == 100000) && (udp_data_packets_recvd_count != 0)) {
-                            cout << "[ERROR] Capture timeout. 100,000 data packet misses" << endl;
-                            cout << "Restart Zynq and Host programs" << endl;
-                            return SM_CAPTURE_TIMEOUT;
-                        }
-                    } else {
-                        cout << "[ERROR] UDP ERROR (ret code: " << ret_code << "). Check connection if zynq program failed" << endl;
-                    }
-                }
-
+            case SM_START_DATA_COLLECTION:
+                handle_data_collection();
                 sm_state = SM_EXIT;
                 break;
-            }
 
-            // TODO: need to add close socket protocol back to client
-            // right now the socket isn't closing at all
-            // prob dependent on isDataCollectionRunningFlag
+            case SM_CLOSE_SOCKET:
+                handle_socket_closure();
+                sm_state = SM_EXIT;
+                break;
+
+            default:
+                std::cerr << "[ERROR] Unknown state: " << sm_state << std::endl;
+                sm_state = SM_EXIT;
+                break;
         }
     }
 
     return true;
 }
+
+void DataCollection::handle_data_collection() {
+    curr_time.start = std::chrono::high_resolution_clock::now();
+    udp_data_packets_recvd_count = 0;
+    packet_misses_counter = 0;
+
+    filename = return_filename(filename);
+    myFile.open(filename);
+
+    write_csv_headers();
+
+    while (!stop_data_collection_flag) {
+        int ret_code = udp_nonblocking_receive(sock_id, data_packet, dc_meta.data_packet_size);
+
+        if (ret_code > 0) {
+            udp_data_packets_recvd_count++;
+            packet_misses_counter = 0;
+            process_and_write_data();
+        } else if (ret_code == UDP_DATA_IS_NOT_AVAILABLE_WITHIN_TIMEOUT) {
+            handle_packet_timeout();
+            if (stop_data_collection_flag) {
+                break;
+            }
+        } else {
+            handle_udp_error(ret_code);
+            stop_data_collection_flag = true;
+            break;
+        }
+    }
+
+    myFile.close();
+}
+
+void DataCollection::write_csv_headers() {
+    myFile << "TIMESTAMP,";
+
+    for (int i = 1; i <= dc_meta.num_encoders; i++) {
+        myFile << "ENCODER_POS_" << i << ",";
+    }
+    for (int i = 1; i <= dc_meta.num_encoders; i++) {
+        myFile << "ENCODER_VEL_" << i << ",";
+    }
+    for (int i = 1; i <= dc_meta.num_motors; i++) {
+        myFile << "MOTOR_CURRENT_" << i << ",";
+    }
+    for (int i = 1; i <= dc_meta.num_motors; i++) {
+        myFile << "MOTOR_STATUS_" << i;
+        if (i < dc_meta.num_motors) myFile << ",";
+    }
+    if (use_ps_io) {
+        myFile << ",DIGITAL_IO,MIO_PINS";
+    }
+
+    myFile << std::endl;
+}
+
+void DataCollection::process_and_write_data() {
+    for (int i = 0; i < dc_meta.data_packet_size / 4; i += dc_meta.size_of_sample) {
+        process_sample(data_packet, i);
+
+        myFile << proc_sample.timestamp << ",";
+
+        for (int j = 0; j < dc_meta.num_encoders; j++) {
+            myFile << proc_sample.encoder_position[j] << ",";
+        }
+        for (int j = 0; j < dc_meta.num_encoders; j++) {
+            myFile << proc_sample.encoder_velocity[j] << ",";
+        }
+        for (int j = 0; j < dc_meta.num_motors; j++) {
+            myFile << proc_sample.motor_current[j] << ",";
+        }
+
+        for (int j = 0; j < dc_meta.num_motors; j++) {
+            myFile << static_cast<int16_t>(proc_sample.motor_status[j]);
+            if (j < dc_meta.num_motors - 1) myFile << ",";
+        }
+
+        if (use_ps_io) {
+            myFile << "," << proc_sample.digital_io << "," << proc_sample.mio_pins;
+        }
+
+        myFile << std::endl;
+        memset(&proc_sample, 0, sizeof(proc_sample));
+    }
+}
+
+void DataCollection::handle_packet_timeout() {
+    packet_misses_counter++;
+
+    if (packet_misses_counter >= 100000 && udp_data_packets_recvd_count != 0) {
+        std::cerr << "[ERROR] Capture timeout. 100,000 data packet misses" << std::endl;
+        std::cerr << "Restart Zynq and Host programs" << std::endl;
+        sm_state = SM_CLOSE_SOCKET;
+        stop_data_collection_flag = true;
+    }
+}
+
+void DataCollection::handle_udp_error(int ret_code) {
+    std::cerr << "[ERROR] UDP ERROR (ret code: " << ret_code << "). Check connection if Zynq program failed" << std::endl;
+    sm_state = SM_CLOSE_SOCKET;
+}
+
+void DataCollection::handle_socket_closure() {
+    std::cout << "Closing socket..." << std::endl;
+    // Add socket closure logic here if needed
+    isDataCollectionRunning = false;
+}
+
 
 void * DataCollection::collect_data_thread(void * args)
 {
@@ -388,9 +381,6 @@ bool DataCollection :: init(uint8_t boardID, bool usePSIO)
 }
 
 
-// TODO: need to call collect_data() in this start() function 
-    // needs to be called as a seperate thread and detached
-    // then stop just sets the stop_data_collection flag to true
 bool DataCollection :: start()
 {
     if (pthread_create(&collect_data_t, nullptr, DataCollection::collect_data_thread, this) != 0) {
@@ -428,7 +418,6 @@ bool DataCollection :: stop()
     cout << "---------------------------------------------------------" << endl;
     printf("STOPPED CAPTURE [%d] ! Time Elapsed: %fs\n", data_capture_count++, curr_time.elapsed);
     cout << "Data stored to " << filename << "." << endl;
-
     cout << "---------------------------------------------------------" << endl << endl;
 
     collect_data_ret = true;
@@ -456,7 +445,8 @@ bool DataCollection :: terminate()
                 cout << "Received Message:  " << ZYNQ_TERMINATATION_SUCCESSFUL << endl;
                 break;
             } else {
-                // need something here
+                cout << "[ERROR] Zynq and Host out of sync" << endl;
+                return false;
             }
         } else if (ret == UDP_SELECT_ERROR || ret == UDP_SOCKET_ERROR || ret == UDP_CONNECTION_CLOSED_ERROR) {
                 cout << "Termination Failed: Check UDP connetion" << endl;
