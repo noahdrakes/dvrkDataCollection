@@ -18,40 +18,45 @@ Make sure to have the most current firmware running on the FPGA found [here](htt
 
 There are two executables used for embedded data collection.
 
-The executable running on the host is compiled using cmake in the `host` directory which will output an executable in a `bin` folder called **`dvrkDataCollection-HOST`**.
+The executable running on the host is compiled using cmake in the `host` directory which will output an executable in a `bin` folder called **`dvrk-data-collection-host`**.
 
-The second executable is meant to run on the Zynq processor. There is a precompiled program stored in releases on github called **`dvrkDataCollection-ZYNQ`**. This program is good to run as is. The source code for this tool is also provided in the `zynq` directory in case someone wants to edit the original program and compile the program for the Zynq using a toolchain file that can be generated using [Mechatronics Embedded](https://github.com/jhu-cisst/mechatronics-embedded.git) repo and generating the build tree by setting the toolchain file for cross compilation using:
-`cmake -DCMAKE_TOOLCHAIN_FILE=path/to/toolchain_clang_fpgav3.cmake <path/to/src>`.
+The second executable is meant to run on the Zynq processor. There is a precompiled program stored in releases on github called **`dvrk-data-collection-zynq`**. This program is good to run as is. The source code for this tool is also provided in the `zynq` directory in case someone wants to edit the original program and compile the program for the Zynq using a toolchain file that can be generated using [Mechatronics Embedded](https://github.com/jhu-cisst/mechatronics-embedded.git) repo and generating the build tree by setting the toolchain file for cross compilation using:
+`cmake -DCMAKE_TOOLCHAIN_FILE=path/to/toolchain_clang_fpgav3.cmake <path/to/src>`. You also have to cross compile the zynq build and specify the Amp1394_DIR containing in cmake that contains the Amp1394Config.cmake file that is generated from cross compiling mechatronics software. 
 
 ## Running
 
 - Connect an ethernet cable to either ethernet port on the FPGA.
 
-- Download the **`dvrkDataCollection-ZYNQ`** executable from [Releases](https://github.com/noahdrakes/dvrkDataCollection/releases/) (or compile the source code by running cmake in the `zynq` directory).
+- Download the **`dvrk-data-collection-zynq`** executable from [Releases](https://github.com/noahdrakes/dvrkDataCollection/releases/) (or compile the source code by running cmake in the `zynq` directory).
 
-- Load the **`dvrkDataCollection-ZYNQ`** executable on the Zynq processor.
+- Load the **`dvrk-data-collection-zynq`** executable on the Zynq processor.
 
 There are two ways to do this. The most efficient way is to use a scp command to transfer the data over ethernet using TCP:
 ```
-scp dvrkDataCollection-ZYNQ root@169.254.10.N:~/media/targetDir
+scp dvrk-data-collection-zynq root@169.254.10.N:~/media/targetDir
 ```
 where N is the Board ID and the exectubale will appear in ~/media/targetDir/.
 
-- Compile the host binary by running cmake on the `host` directory to generate the **`dvrkDataCollection-HOST`** exectuable.
+- Compile the host binary by running cmake on the `host` directory to generate the **`dvrk-data-collection-host`** exectuable.
 
 - SSH into the zynq processor: `ssh root@169.254.10.N`, where N is the boardID of the controller.
 - Start the Zynq program first by running:
 
 ```
         cd /media/bin
-        ./dvrkDataCollection-ZYNQ
+        ./dvrk-data-collection-zynq
 ```
 
 - Start the Host program by cd'ing into the `bin` folder inside the build tree and run:
 
 ```
-        ./dvrkDataCollection-HOST
+        ./dvrk-data-collection-host <boardID> [-t <seconds>] [-i]
 ```
+
+Where:
+-    -t enables timed capture mode 
+
+-    -i enables PS IO to be included in data collection CSV
 
 The host program output will guide you on how to collect data.
 
@@ -59,7 +64,7 @@ The host program output will guide you on how to collect data.
 
 The program will output a csv file for each capture containing the following data for each axis:
 
-*Timestamp,* *EncoderPos1*,..,*EncoderPosN*, *EncoderVel1*, *EncoderVelN*, *MotorCurrent1*, *MotorCurrentN*, *CommandedCur1*, *CommandedCurrN*, *BoardIO*, in that order.
+*Timestamp,* *EncoderPos1*,..,*EncoderPosN*, *EncoderVel1*, *EncoderVelN*, *MotorCurrent1*, *MotorCurrentN*, *CommandedCur1*, *CommandedCurrN*, *BoardIO* (optional), *MIOPins* (optional) in that order.
 
 The filename for each capture is capture_[date and time].csv
 
