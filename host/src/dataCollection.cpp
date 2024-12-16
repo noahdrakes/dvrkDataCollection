@@ -52,6 +52,30 @@ static bool isInteger(const char* str)
     return true;
 }
 
+static bool isFloat(const char* str)
+{
+    if (str == NULL || (strcmp(str, "") == 0)) {
+        return false;
+    }
+
+    int strLength = strlen(str);
+    bool hasDecimalPoint = false;
+
+    for (int i = 0; i < strLength; i++) {
+        if (str[i] == '.') {
+
+            if (hasDecimalPoint) {
+                return false;
+            }
+            hasDecimalPoint = true;
+        } else if (!isdigit(str[i])) {
+            return false;
+        }
+    }
+
+    return hasDecimalPoint && strLength > 1;
+}
+
 static bool isExitKeyPressed()
 {
     fd_set readfds;
@@ -72,7 +96,7 @@ static bool isExitKeyPressed()
 
 int main(int argc, char *argv[])
 {
-    int dataCollectionDuration = 0;
+    float data_collection_duration_s= 0;
     bool startFlag = false;
     bool timedCaptureFlag = false;
     bool use_ps_io_flag = false;
@@ -92,7 +116,7 @@ int main(int argc, char *argv[])
         cout << "|  <boardID>          Required. ID of the board to connect to." << endl;
         cout << "|" << endl;
         cout << "|Options:" << endl;
-        cout << "|  -t <seconds>       Optional. Duration for data capture in seconds (integer)." << endl;
+        cout << "|  -t <seconds>       Optional. Duration for data capture in seconds (float)." << endl;
         cout << "|  -i                 Optional. Add PS IO to packet for data collection." << endl;
         cout << "|" << endl;
         cout << "|[NOTE] Ensure the server is started before running the client." << endl;
@@ -118,11 +142,11 @@ int main(int argc, char *argv[])
 
             if (argv[i][1] == 't') {
 
-                if (!isInteger(argv[i+1])) {
-                    cout << "[ERROR] invalid time value " << argv[i+1] << " for timed capture. Pass in integer" << endl;
+                if (!isFloat(argv[i+1])) {
+                    cout << "[ERROR] invalid time value " << argv[i+1] << " for timed capture. Pass in float" << endl;
                     return -1;
                 } else {
-                    dataCollectionDuration = atoi(argv[i+1]);
+                    data_collection_duration_s = atof(argv[i+1]);
                     timedCaptureFlag = true;
                     cout << "Timed Capture Enabled!" << endl;
                     i+=1;
@@ -178,7 +202,8 @@ int main(int argc, char *argv[])
         cout << "...Press [ENTER] to terminate capture" << endl;
 
         if (timedCaptureFlag) {
-            sleep(dataCollectionDuration);
+            int data_collection_duration_us = data_collection_duration_s * 1000000;
+            usleep(data_collection_duration_us);
         } else {
             while(1) {
                 if (isExitKeyPressed()) {
