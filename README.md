@@ -22,11 +22,11 @@ The executable running on the host is compiled using cmake in the `host` directo
 
 The second executable must be cross-compiled to run on the Zynq processor. Due to the greater effort required, a precompiled executable, called **`dvrk-data-collection-zynq`**, will be stored on GitHub releases for each [mechatronics-embedded release](https://github.com/jhu-cisst/mechatronics-embedded/releases). Eventually, `dvrk-data-collection-zynq` may be added to the mechatronics-embedded release.
 
-If it is necessary to build `dvrk-data-collection-zynq`, the source code is provided in the `zynq` directory and must be cross-compiled using a toolchain file that can be generated using the [mechatronics-embedded](https://github.com/jhu-cisst/mechatronics-embedded.git) repository:
+If it is necessary to build `dvrk-data-collection-zynq`, the source code is provided in the `zynq` directory and must be cross-compiled using a toolchain file (`toolchain_clang_fpgav3.cmake` or `toolchain_vitis_fpgav3.cmake`) that can be generated using the [mechatronics-embedded](https://github.com/jhu-cisst/mechatronics-embedded.git) repository:
 ```
-cmake -DCMAKE_TOOLCHAIN_FILE=path/to/toolchain_clang_fpgav3.cmake <path/to/src>`
+cmake -DCMAKE_TOOLCHAIN_FILE=<path/to/toolchain_file> <path/to/src>
 ```
-There is also a dependency on the Amp1394 library in the [mechatronics-software](https://github.com/jhu-cisst/mechatronics-software.git) repository, which must also have been cross-compiled for the Zynq using the toolchain file. The path to this dependency (Amp1394Config.cmake) is specified via the Amp1394_DIR variable in CMake.
+There is also a dependency on the Amp1394 library in the [mechatronics-software](https://github.com/jhu-cisst/mechatronics-software.git) repository, which must also have been cross-compiled for the Zynq using the toolchain file. The path to this dependency (`Amp1394Config.cmake`) is specified via the `Amp1394_DIR` variable in CMake.
 
 ## Running
 
