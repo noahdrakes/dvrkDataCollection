@@ -19,7 +19,7 @@ find_package (dvrkDataCollection REQUIRED
 include_directories(${dvrkDataCollection_INCLUDE_DIR})
 
 # Add the executable
-add_executable(dvrk-data-collection-host dataCollection.cpp)
+add_executable(dvrk-data-collection-host dvrk-data-collection-host.cpp)
 
 link_directories(${dvrkDataCollection_LIBRARY_DIR})
 target_link_libraries(dvrk-data-collection-host PRIVATE ${dvrkDataCollection_LIBRARY})
