@@ -126,7 +126,7 @@ static int mio_mmap_init()
 
     // Open /dev/mem for accessing physical memory
     if ((mem_fd = open("/dev/mem", O_RDWR | O_SYNC)) < 0) {
-        printf("Failed to open /dev/mem\n");
+        cout << "Failed to open /dev/mem" << endl;
         return -1;
     }
 
@@ -178,11 +178,11 @@ static int mio_mmap_init()
 uint8_t returnMIOPins(){
 
     if (GPIO_MEM_REGION == NULL) {
-        printf("[ERROR] MIO mmap region initialized incorrectly!\n");
+        cout << "[ERROR] MIO mmap region initialized incorrectly!" << endl;
         return 0;
     }
 
-    uint16_t MIO_PINS_MSK = 0x3C;
+    const uint16_t MIO_PINS_MSK = 0x3C;
     uint32_t gpio_bank1 = GPIO_MEM_REGION[GPIO_BANK1_OFFSET/4];
 
     return (gpio_bank1 & MIO_PINS_MSK) >> 2;
@@ -240,17 +240,17 @@ static int udp_transmit(UDP_Info *udp_host, void * data, int size)
 }
 
 
-static bool initiate_socket_connection(int *host_socket)
+static bool initiate_socket_connection(int &host_socket)
 {
-    cout << endl << "Initiating Socket Connection with DVRK board..." << endl;
+    cout << endl << "Initiating Socket Connection with host..." << endl;
 
     udp_host.AddrLen = sizeof(udp_host.Addr);
 
     // Create a UDP socket
-    *host_socket = socket(AF_INET, SOCK_DGRAM, 0);
+    host_socket = socket(AF_INET, SOCK_DGRAM, 0);
 
-    if (*host_socket < 0) {
-        cerr << "[UDP ERROR] Failed to create socket [" << *host_socket << "]" << endl;
+    if (host_socket < 0) {
+        cerr << "[UDP ERROR] Failed to create socket [" << host_socket << "]" << endl;
         return false;
     }
 
@@ -260,9 +260,9 @@ static bool initiate_socket_connection(int *host_socket)
     serverAddr.sin_port = htons(12345); 
     serverAddr.sin_addr.s_addr = INADDR_ANY;
 
-    if (bind(*host_socket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) < 0) {
+    if (bind(host_socket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) < 0) {
         cerr << "[UDP ERROR] Failed to bind socket" << endl;
-        close(*host_socket);
+        close(host_socket);
         return false;
     }
 
@@ -625,18 +625,18 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board)
 
                         pthread_join(consumer_t, nullptr);
 
-                        printf("------------------------------------------------\n");
-                        printf("UDP DATA PACKETS SENT TO HOST: %d\n", data_packet_count);
-                        printf("SAMPLES SENT TO HOST: %d\n", sample_count);
-                        printf("EMIO ERROR COUNT: %d", emio_read_error_counter);
-                        printf("------------------------------------------------\n\n");
+                        cout << "------------------------------------------------" << endl;
+                        cout << "UDP DATA PACKETS SENT TO HOST: " << data_packet_count << endl;
+                        cout << "SAMPLES SENT TO HOST: " << sample_count << endl;
+                        cout << "EMIO ERROR COUNT: " << emio_read_error_counter << endl;
+                        cout << "------------------------------------------------" << endl << endl;
 
                         emio_read_error_counter = 0; 
                         data_packet_count = 0;
                         sample_count = 0;
 
                         state = SM_WAIT_FOR_HOST_START_CMD;
-                        printf("Waiting for command from host...\n");
+                        cout << "Waiting for command from host..." << endl;
                         
                     } else {
                         sm_ret = SM_OUT_OF_SYNC;
@@ -662,7 +662,7 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board)
                     switch (sm_ret){
                         
                         case SM_OUT_OF_SYNC:
-                            cout << "Zynq of sync with Host. Recieved unexpected command: " << recvdCMD << endl;
+                            cout << "Zynq of sync with Host. Received unexpected command: " << recvdCMD << endl;
                             break;
                         case SM_UDP_ERROR:
                             cout << "Udp ERROR. Make sure host program is running." << endl;
@@ -695,7 +695,7 @@ int main()
     string portDescription = BasePort::DefaultPort();
     BasePort *Port = PortFactory(portDescription.c_str());
 
-    if(!Port->IsOK()) {
+    if (!Port->IsOK()) {
         std::cerr << "Failed to initialize " << Port->GetPortTypeString() << std::endl;
         return -1;
     }
@@ -719,7 +719,7 @@ int main()
 
     Port->AddBoard(Board);
 
-    bool isOK = initiate_socket_connection(&udp_host.socket);
+    bool isOK = initiate_socket_connection(udp_host.socket);
 
     if (!isOK) {
         cout << "[error] failed to establish socket connection !!" << endl;

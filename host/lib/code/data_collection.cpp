@@ -51,7 +51,7 @@ static float convert_chrono_duration_to_float(chrono::high_resolution_clock::tim
     return duration.count();
 }
 
-static string return_filename(string filename)
+static string return_filename()
 {
     time_t t = time(NULL);
     struct tm* ptr = localtime(&t);
@@ -59,7 +59,7 @@ static string return_filename(string filename)
     string date_and_time = asctime(ptr);
     date_and_time.pop_back(); // remove newline character
 
-    filename = "capture_" + date_and_time + ".csv";
+    string filename("capture_" + date_and_time + ".csv");
 
     for (int i = 0; i < filename.length();i++) {
 
@@ -123,7 +123,7 @@ int DataCollection::collect_data() {
         return false;
     }
 
-    printf("CAPTURE [%d] in Progress ... ! \n", data_capture_count);
+    cout << "CAPTURE [" << data_capture_count << "] in Progress ... !" << endl;
 
     isDataCollectionRunning = true;
     stop_data_collection_flag = false;
@@ -161,7 +161,7 @@ void DataCollection::handle_data_collection() {
     udp_data_packets_recvd_count = 0;
     packet_misses_counter = 0;
 
-    filename = return_filename(filename);
+    filename = return_filename();
     myFile.open(filename);
 
     write_csv_headers();
@@ -416,7 +416,7 @@ bool DataCollection :: stop()
 
 
     cout << "---------------------------------------------------------" << endl;
-    printf("STOPPED CAPTURE [%d] ! Time Elapsed: %fs\n", data_capture_count++, curr_time.elapsed);
+    cout << "STOPPED CAPTURE [" << data_capture_count++ << "] ! Time Elapsed: " << curr_time.elapsed << "s" << endl;
     cout << "Data stored to " << filename << "." << endl;
     cout << "---------------------------------------------------------" << endl << endl;
 

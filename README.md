@@ -20,22 +20,27 @@ There are two executables used for embedded data collection.
 
 The executable running on the host is compiled using cmake in the `host` directory which will output an executable in a `bin` folder called **`dvrk-data-collection-host`**.
 
-The second executable is meant to run on the Zynq processor. There is a precompiled program stored in releases on github called **`dvrk-data-collection-zynq`**. This program is good to run as is. The source code for this tool is also provided in the `zynq` directory in case someone wants to edit the original program and compile the program for the Zynq using a toolchain file that can be generated using [Mechatronics Embedded](https://github.com/jhu-cisst/mechatronics-embedded.git) repo and generating the build tree by setting the toolchain file for cross compilation using:
-`cmake -DCMAKE_TOOLCHAIN_FILE=path/to/toolchain_clang_fpgav3.cmake <path/to/src>`. You also have to cross compile the zynq build and specify the Amp1394_DIR containing in cmake that contains the Amp1394Config.cmake file that is generated from cross compiling mechatronics software. 
+The second executable must be cross-compiled to run on the Zynq processor. Due to the greater effort required, a precompiled executable, called **`dvrk-data-collection-zynq`**, will be stored on GitHub releases for each [mechatronics-embedded release](https://github.com/jhu-cisst/mechatronics-embedded/releases). Eventually, `dvrk-data-collection-zynq` may be added to the mechatronics-embedded release.
+
+If it is necessary to build `dvrk-data-collection-zynq`, the source code is provided in the `zynq` directory and must be cross-compiled using a toolchain file that can be generated using the [mechatronics-embedded](https://github.com/jhu-cisst/mechatronics-embedded.git) repository:
+```
+cmake -DCMAKE_TOOLCHAIN_FILE=path/to/toolchain_clang_fpgav3.cmake <path/to/src>`
+```
+There is also a dependency on the Amp1394 library in the [mechatronics-software](https://github.com/jhu-cisst/mechatronics-software.git) repository, which must also have been cross-compiled for the Zynq using the toolchain file. The path to this dependency (Amp1394Config.cmake) is specified via the Amp1394_DIR variable in CMake.
 
 ## Running
 
 - Connect an ethernet cable to either ethernet port on the FPGA.
 
-- Download the **`dvrk-data-collection-zynq`** executable from [Releases](https://github.com/noahdrakes/dvrkDataCollection/releases/) (or compile the source code by running cmake in the `zynq` directory).
+- Download the **`dvrk-data-collection-zynq`** executable from [Releases](https://github.com/jhu-dvrk/fpgav3-data-collection/releases/) (or cross-compile the source code by running cmake in the `zynq` directory, as described above).
 
 - Load the **`dvrk-data-collection-zynq`** executable on the Zynq processor.
 
 There are two ways to do this. The most efficient way is to use a scp command to transfer the data over ethernet using TCP:
 ```
-scp dvrk-data-collection-zynq root@169.254.10.N:~/media/targetDir
+scp dvrk-data-collection-zynq root@169.254.10.N:~/media
 ```
-where N is the Board ID and the exectubale will appear in ~/media/targetDir/.
+where N is the Board ID. The executable will appear in ~/media.
 
 - Compile the host binary by running cmake on the `host` directory to generate the **`dvrk-data-collection-host`** exectuable.
 
@@ -43,7 +48,7 @@ where N is the Board ID and the exectubale will appear in ~/media/targetDir/.
 - Start the Zynq program first by running:
 
 ```
-        cd /media/bin
+        cd /media
         ./dvrk-data-collection-zynq
 ```
 
@@ -56,7 +61,7 @@ where N is the Board ID and the exectubale will appear in ~/media/targetDir/.
 Where:
 -    -t enables timed capture mode 
 
--    -i enables PS IO to be included in data collection CSV
+-    -i enables PS IO and FPGA digital I/O to be included in data collection CSV
 
 The host program output will guide you on how to collect data.
 
@@ -73,4 +78,3 @@ The filename for each capture is capture_[date and time].csv
 Send me an email if you have any questions.
 Noah Drakes
 email: ndrakes1@jh.edu
-

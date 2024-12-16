@@ -92,7 +92,7 @@ int main(int argc, char *argv[])
         cout << "|  <boardID>          Required. ID of the board to connect to." << endl;
         cout << "|" << endl;
         cout << "|Options:" << endl;
-        cout << "|  -t <seconds>       Optional. Duration for data capture in seconds." << endl;
+        cout << "|  -t <seconds>       Optional. Duration for data capture in seconds (integer)." << endl;
         cout << "|  -i                 Optional. Add PS IO to packet for data collection." << endl;
         cout << "|" << endl;
         cout << "|[NOTE] Ensure the server is started before running the client." << endl;
@@ -101,46 +101,43 @@ int main(int argc, char *argv[])
     } 
 
     if (!isInteger(argv[1])) {
-        cout << "[ERROR] Invalid boardID arg" << endl;
+        cout << "[ERROR] Invalid boardID arg: " << argv[1] << endl;
         return -1;
     } else {
         boardID = atoi(argv[1]);
     }
 
     if (argc >= 6){
-        cout << "[ERROR] To many cmd line args" << endl;
+        cout << "[ERROR] Too many cmd line args" << endl;
         return -1;
     }
 
-    if (argc >= 3){
+    for (int i = min_args + 1; i < argc; i++ ){
 
-        for (int i = min_args + 1; i < argc; i++ ){
+        if (argv[i][0] == '-') {
 
-            if (argv[i][0] == '-'){
+            if (argv[i][1] == 't') {
 
-                if (argv[i][1] == 't'){
-
-                    if(!isInteger(argv[i+1])){
-                        cout << "[ERROR] invalid time value for timed capture. Pass in integer" << endl;
-                        return -1;
-                    } else {
-                        dataCollectionDuration = atoi(argv[i+1]);
-                        timedCaptureFlag = true;
-                        cout << "Timed Capture Enabled!" << endl;
-                        i+=1;
-                    }       
-                }
-
-                else if (argv[i][1] == 'i' ){
-                    use_ps_io_flag = true;
-                    cout << "PS IO pins will be included in data packet!" << endl;
+                if (!isInteger(argv[i+1])) {
+                    cout << "[ERROR] invalid time value " << argv[i+1] << " for timed capture. Pass in integer" << endl;
+                    return -1;
                 } else {
-                    cout << "[ERROR] Not enough args" << endl;
+                    dataCollectionDuration = atoi(argv[i+1]);
+                    timedCaptureFlag = true;
+                    cout << "Timed Capture Enabled!" << endl;
+                    i+=1;
                 }
+            }
+
+            else if (argv[i][1] == 'i' ) {
+                use_ps_io_flag = true;
+                cout << "PS IO pins will be included in data packet!" << endl;
             } else {
-                cout << "[ERROR] invalid char" << endl;
-                return -1;
-            }            
+                cout << "[ERROR] Invalid arg: " << argv[i] << endl;
+            }
+        } else {
+            cout << "[ERROR] invalid arg: " << argv[i] << endl;
+            return -1;
         }
     }
 
@@ -157,7 +154,7 @@ int main(int argc, char *argv[])
 
     while (!stop_data_collection) {
 
-        printf("Woud you like to start capture [%d]? (y/n): ", count);
+        cout << "Woud you like to start capture [" << count << "]? (y/n): ";
 
         char yn;
         cin >> yn;
@@ -178,7 +175,7 @@ int main(int argc, char *argv[])
         if (!DC->start()) {
             return -1;
         }
-        printf("...Press [ENTER] to terminate capture\n");
+        cout << "...Press [ENTER] to terminate capture" << endl;
 
         if (timedCaptureFlag) {
             sleep(dataCollectionDuration);
