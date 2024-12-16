@@ -43,7 +43,7 @@ if (Amp1394_HAS_EMIO)
 
   link_directories(${Amp1394_LIBRARY_DIR})
 
-  add_executable(dvrk-data-collection-zynq dvrkDataCollection-ZYNQ.cpp)
+  add_executable(dvrk-data-collection-zynq dvrk-data-collection-zynq.cpp)
   target_link_libraries(dvrk-data-collection-zynq ${Amp1394_LIBRARIES})
 
   install (TARGETS dvrk-data-collection-zynq
