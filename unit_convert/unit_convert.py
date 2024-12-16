@@ -4,6 +4,11 @@ import json
 import csv
 import os
 
+# osaUnitToSI Factor
+deg2rad = np.pi / 180
+mm2m = 0.001
+enc_unit = [deg2rad, mm2m]
+
 def unitConvert(configuration, generation, fileName):
     with open(configuration, 'r') as file:
         robot_json = json.load(file)
@@ -33,8 +38,10 @@ def unitConvert(configuration, generation, fileName):
         Torq_FB[f'TORQUE_FEEDBACK_{i+1}'] = ((robot_data[f'MOTOR_CURRENT_{i+1}'] * Curr_B2C[i]['Scale']) + Curr_B2C[i]['Offset']) / Curr_Nm2C[i][
             'Scale']
         Torq_CMD[f'TORQUE_COMMAND_{i+1}'] = ((robot_data[f'MOTOR_STATUS_{i+1}'] - Curr_C2B[i]['Offset']) / Curr_C2B[i]['Scale']) / Curr_Nm2C[i]['Scale']
-        Pos_FB[f'POSITION_FEEDBACK_{i+1}'] = ((robot_data[f'ENCODER_POS_{i+1}'] - 0x800000) / Enc_B2P[i]['Scale']) * np.pi / 180.0
-        Vel_FB[f'VELOCITY_FEEDBACK_{i+1}'] = ((robot_data[f'ENCODER_VEL_{i+1}']) / Enc_B2P[i]['Scale']) * np.pi / 180.0
+        Pos_FB[f'POSITION_FEEDBACK_{i+1}'] = ((robot_data[f'ENCODER_POS_{i+1}'] - 0x800000) * Enc_B2P[i]['Scale']) \
+                                             * enc_unit[bool(Actuators[i]['JointType'] == "PRISMATIC")]
+        Vel_FB[f'VELOCITY_FEEDBACK_{i+1}'] = ((robot_data[f'ENCODER_VEL_{i+1}']) * Enc_B2P[i]['Scale']) \
+                                             * enc_unit[bool(Actuators[i]['JointType'] == "PRISMATIC")]
 
     return {
         "Time": Time,
