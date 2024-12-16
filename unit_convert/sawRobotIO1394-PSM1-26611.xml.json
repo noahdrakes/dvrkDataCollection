@@ -1,0 +1,462 @@
+{
+   "DallasChips" : [
+      {
+         "BoardID" : 6,
+         "Name" : "PSM1-Dallas"
+      }
+   ],
+   "DigitalInputs" : [
+      {
+         "BitID" : 0,
+         "BoardID" : 6,
+         "DebounceThreshold" : 0.20000000000000001,
+         "DebounceThresholdClick" : 0.040000000000000008,
+         "Name" : "PSM1-SUJClutch",
+         "PressedValue" : true,
+         "SkipFirstRun" : false,
+         "TriggerWhenPressed" : true,
+         "TriggerWhenReleased" : true
+      },
+      {
+         "BitID" : 2,
+         "BoardID" : 6,
+         "DebounceThreshold" : 0.20000000000000001,
+         "DebounceThresholdClick" : 0.040000000000000008,
+         "Name" : "PSM1-ManipClutch",
+         "PressedValue" : true,
+         "SkipFirstRun" : false,
+         "TriggerWhenPressed" : true,
+         "TriggerWhenReleased" : true
+      },
+      {
+         "BitID" : 23,
+         "BoardID" : 6,
+         "DebounceThreshold" : 0.20000000000000001,
+         "DebounceThresholdClick" : 0.040000000000000008,
+         "Name" : "PSM1-Tool",
+         "PressedValue" : true,
+         "SkipFirstRun" : false,
+         "TriggerWhenPressed" : true,
+         "TriggerWhenReleased" : true
+      },
+      {
+         "BitID" : 26,
+         "BoardID" : 6,
+         "DebounceThreshold" : 0.20000000000000001,
+         "DebounceThresholdClick" : 0.040000000000000008,
+         "Name" : "PSM1-Adapter",
+         "PressedValue" : true,
+         "SkipFirstRun" : false,
+         "TriggerWhenPressed" : true,
+         "TriggerWhenReleased" : true
+      }
+   ],
+   "DigitalOutputs" : null,
+   "Robots" : [
+      {
+         "Actuators" : [
+            {
+               "AxisID" : 0,
+               "BoardID" : 6,
+               "Drive" : {
+                  "BitsToCurrent" : {
+                     "Offset" : 6.2218059999999999,
+                     "Scale" : -0.00019073500000000001,
+                     "Unit" : ""
+                  },
+                  "CurrentCommandLimit" : 1.3400000000000001,
+                  "CurrentToBits" : {
+                     "Offset" : 32738,
+                     "Scale" : -5242.8800000000001,
+                     "Unit" : ""
+                  },
+                  "EffortToCurrent" : {
+                     "Offset" : 0,
+                     "Scale" : 0.40408938459999999,
+                     "Unit" : ""
+                  }
+               },
+               "Encoder" : {
+                  "BitsToPosition" : {
+                     "Offset" : 0,
+                     "Scale" : -0.00044247787610600002,
+                     "Unit" : "deg"
+                  },
+                  "PositionLimitsSoft" : {
+                     "Lower" : -91,
+                     "Unit" : "deg",
+                     "Upper" : 91
+                  },
+                  "VelocitySource" : "FIRMWARE"
+               },
+               "JointType" : "REVOLUTE",
+               "Pot" : {
+                  "BitsToVoltage" : {
+                     "Offset" : 0,
+                     "Scale" : 6.866455078125e-05,
+                     "Unit" : ""
+                  },
+                  "LookupTable" : null,
+                  "SensorToPosition" : {
+                     "Offset" : 98.792783253740467,
+                     "Scale" : -43.622377316799941,
+                     "Unit" : "deg"
+                  },
+                  "Type" : 1
+               }
+            },
+            {
+               "AxisID" : 1,
+               "BoardID" : 6,
+               "Drive" : {
+                  "BitsToCurrent" : {
+                     "Offset" : 6.2275970000000003,
+                     "Scale" : -0.00019073500000000001,
+                     "Unit" : ""
+                  },
+                  "CurrentCommandLimit" : 1.3400000000000001,
+                  "CurrentToBits" : {
+                     "Offset" : 32721,
+                     "Scale" : -5242.8800000000001,
+                     "Unit" : ""
+                  },
+                  "EffortToCurrent" : {
+                     "Offset" : 0,
+                     "Scale" : 0.40408938459999999,
+                     "Unit" : ""
+                  }
+               },
+               "Encoder" : {
+                  "BitsToPosition" : {
+                     "Offset" : 0,
+                     "Scale" : -0.00044247787610600002,
+                     "Unit" : "deg"
+                  },
+                  "PositionLimitsSoft" : {
+                     "Lower" : -53,
+                     "Unit" : "deg",
+                     "Upper" : 53
+                  },
+                  "VelocitySource" : "FIRMWARE"
+               },
+               "JointType" : "REVOLUTE",
+               "Pot" : {
+                  "BitsToVoltage" : {
+                     "Offset" : 0,
+                     "Scale" : 6.866455078125e-05,
+                     "Unit" : ""
+                  },
+                  "LookupTable" : null,
+                  "SensorToPosition" : {
+                     "Offset" : 57.770930831803163,
+                     "Scale" : -28.616016989449427,
+                     "Unit" : "deg"
+                  },
+                  "Type" : 1
+               }
+            },
+            {
+               "AxisID" : 2,
+               "BoardID" : 6,
+               "Drive" : {
+                  "BitsToCurrent" : {
+                     "Offset" : -6.2304769999999996,
+                     "Scale" : 0.00019073500000000001,
+                     "Unit" : ""
+                  },
+                  "CurrentCommandLimit" : 0.67000000000000004,
+                  "CurrentToBits" : {
+                     "Offset" : 32803,
+                     "Scale" : 5242.8800000000001,
+                     "Unit" : ""
+                  },
+                  "EffortToCurrent" : {
+                     "Offset" : 0,
+                     "Scale" : 0.067828432100000002,
+                     "Unit" : ""
+                  }
+               },
+               "Encoder" : {
+                  "BitsToPosition" : {
+                     "Offset" : 0,
+                     "Scale" : 0.0012962938205590001,
+                     "Unit" : "mm"
+                  },
+                  "PositionLimitsSoft" : {
+                     "Lower" : 0,
+                     "Unit" : "mm",
+                     "Upper" : 240
+                  },
+                  "VelocitySource" : "FIRMWARE"
+               },
+               "JointType" : "PRISMATIC",
+               "Pot" : {
+                  "BitsToVoltage" : {
+                     "Offset" : 0,
+                     "Scale" : 6.866455078125e-05,
+                     "Unit" : ""
+                  },
+                  "LookupTable" : null,
+                  "SensorToPosition" : {
+                     "Offset" : -14.502220900825641,
+                     "Scale" : 59.22534157060975,
+                     "Unit" : "mm"
+                  },
+                  "Type" : 1
+               }
+            },
+            {
+               "AxisID" : 3,
+               "BoardID" : 6,
+               "Drive" : {
+                  "BitsToCurrent" : {
+                     "Offset" : 6.305803,
+                     "Scale" : -0.00019073500000000001,
+                     "Unit" : ""
+                  },
+                  "CurrentCommandLimit" : 0.67000000000000004,
+                  "CurrentToBits" : {
+                     "Offset" : 33092,
+                     "Scale" : -5242.8800000000001,
+                     "Unit" : ""
+                  },
+                  "EffortToCurrent" : {
+                     "Offset" : 0,
+                     "Scale" : 1.9497053995,
+                     "Unit" : ""
+                  }
+               },
+               "Encoder" : {
+                  "BitsToPosition" : {
+                     "Offset" : 0,
+                     "Scale" : -0.0076857386848850004,
+                     "Unit" : "deg"
+                  },
+                  "PositionLimitsSoft" : {
+                     "Lower" : -174,
+                     "Unit" : "deg",
+                     "Upper" : 174
+                  },
+                  "VelocitySource" : "FIRMWARE"
+               },
+               "JointType" : "REVOLUTE",
+               "Pot" : {
+                  "BitsToVoltage" : {
+                     "Offset" : 0,
+                     "Scale" : 6.866455078125e-05,
+                     "Unit" : ""
+                  },
+                  "LookupTable" : null,
+                  "SensorToPosition" : {
+                     "Offset" : 179.3310710928954,
+                     "Scale" : -78.725961063601744,
+                     "Unit" : "deg"
+                  },
+                  "Type" : 1
+               }
+            },
+            {
+               "AxisID" : 4,
+               "BoardID" : 6,
+               "Drive" : {
+                  "BitsToCurrent" : {
+                     "Offset" : 6.2433370000000004,
+                     "Scale" : -0.00019073500000000001,
+                     "Unit" : ""
+                  },
+                  "CurrentCommandLimit" : 0.67000000000000004,
+                  "CurrentToBits" : {
+                     "Offset" : 32801,
+                     "Scale" : -5242.8800000000001,
+                     "Unit" : ""
+                  },
+                  "EffortToCurrent" : {
+                     "Offset" : 0,
+                     "Scale" : 1.9497053995,
+                     "Unit" : ""
+                  }
+               },
+               "Encoder" : {
+                  "BitsToPosition" : {
+                     "Offset" : 0,
+                     "Scale" : -0.0076857386848850004,
+                     "Unit" : "deg"
+                  },
+                  "PositionLimitsSoft" : {
+                     "Lower" : -174,
+                     "Unit" : "deg",
+                     "Upper" : 174
+                  },
+                  "VelocitySource" : "FIRMWARE"
+               },
+               "JointType" : "REVOLUTE",
+               "Pot" : {
+                  "BitsToVoltage" : {
+                     "Offset" : 0,
+                     "Scale" : 6.866455078125e-05,
+                     "Unit" : ""
+                  },
+                  "LookupTable" : null,
+                  "SensorToPosition" : {
+                     "Offset" : 179.04868724234268,
+                     "Scale" : -78.526608574335071,
+                     "Unit" : "deg"
+                  },
+                  "Type" : 1
+               }
+            },
+            {
+               "AxisID" : 5,
+               "BoardID" : 6,
+               "Drive" : {
+                  "BitsToCurrent" : {
+                     "Offset" : -6.2504160000000004,
+                     "Scale" : 0.00019073500000000001,
+                     "Unit" : ""
+                  },
+                  "CurrentCommandLimit" : 0.67000000000000004,
+                  "CurrentToBits" : {
+                     "Offset" : 32830,
+                     "Scale" : 5242.8800000000001,
+                     "Unit" : ""
+                  },
+                  "EffortToCurrent" : {
+                     "Offset" : 0,
+                     "Scale" : 1.9497053995,
+                     "Unit" : ""
+                  }
+               },
+               "Encoder" : {
+                  "BitsToPosition" : {
+                     "Offset" : 0,
+                     "Scale" : 0.0076857386848850004,
+                     "Unit" : "deg"
+                  },
+                  "PositionLimitsSoft" : {
+                     "Lower" : -174,
+                     "Unit" : "deg",
+                     "Upper" : 174
+                  },
+                  "VelocitySource" : "FIRMWARE"
+               },
+               "JointType" : "REVOLUTE",
+               "Pot" : {
+                  "BitsToVoltage" : {
+                     "Offset" : 0,
+                     "Scale" : 6.866455078125e-05,
+                     "Unit" : ""
+                  },
+                  "LookupTable" : null,
+                  "SensorToPosition" : {
+                     "Offset" : 178.51651932200463,
+                     "Scale" : -78.39642987566144,
+                     "Unit" : "deg"
+                  },
+                  "Type" : 1
+               }
+            },
+            {
+               "AxisID" : 6,
+               "BoardID" : 6,
+               "Drive" : {
+                  "BitsToCurrent" : {
+                     "Offset" : -6.2524699999999998,
+                     "Scale" : 0.00019073500000000001,
+                     "Unit" : ""
+                  },
+                  "CurrentCommandLimit" : 0.67000000000000004,
+                  "CurrentToBits" : {
+                     "Offset" : 32846,
+                     "Scale" : 5242.8800000000001,
+                     "Unit" : ""
+                  },
+                  "EffortToCurrent" : {
+                     "Offset" : 0,
+                     "Scale" : 1.9497053995,
+                     "Unit" : ""
+                  }
+               },
+               "Encoder" : {
+                  "BitsToPosition" : {
+                     "Offset" : 0,
+                     "Scale" : 0.0076857386848850004,
+                     "Unit" : "deg"
+                  },
+                  "PositionLimitsSoft" : {
+                     "Lower" : -174,
+                     "Unit" : "deg",
+                     "Upper" : 174
+                  },
+                  "VelocitySource" : "FIRMWARE"
+               },
+               "JointType" : "REVOLUTE",
+               "Pot" : {
+                  "BitsToVoltage" : {
+                     "Offset" : 0,
+                     "Scale" : 6.866455078125e-05,
+                     "Unit" : ""
+                  },
+                  "LookupTable" : null,
+                  "SensorToPosition" : {
+                     "Offset" : 175.47601697921374,
+                     "Scale" : -77.962460390225232,
+                     "Unit" : "deg"
+                  },
+                  "Type" : 1
+               }
+            }
+         ],
+         "HardwareVersion" : "DQLA",
+         "HasEncoderPreload" : true,
+         "Name" : "PSM1",
+         "NumberOfActuators" : 7,
+         "NumberOfBrakes" : 0,
+         "OnlyIO" : false,
+         "PotCoupling" : {
+            "ActuatorToJointEffort" : null,
+            "ActuatorToJointPosition" : null,
+            "JointToActuatorEffort" : null,
+            "JointToActuatorPosition" : null
+         },
+         "PotTolerances" : [
+            {
+               "AxisID" : 0,
+               "Distance" : 0.087266462599716474,
+               "Latency" : 0.01
+            },
+            {
+               "AxisID" : 1,
+               "Distance" : 0.087266462599716474,
+               "Latency" : 0.01
+            },
+            {
+               "AxisID" : 2,
+               "Distance" : 0.0050000000000000001,
+               "Latency" : 0.01
+            },
+            {
+               "AxisID" : 3,
+               "Distance" : 0.087266462599716474,
+               "Latency" : 0.01
+            },
+            {
+               "AxisID" : 4,
+               "Distance" : 0.087266462599716474,
+               "Latency" : 0.01
+            },
+            {
+               "AxisID" : 5,
+               "Distance" : 0.087266462599716474,
+               "Latency" : 0.01
+            },
+            {
+               "AxisID" : 6,
+               "Distance" : 0.087266462599716474,
+               "Latency" : 0.01
+            }
+         ],
+         "SerialNumber" : "26611"
+      }
+   ]
+}
+
