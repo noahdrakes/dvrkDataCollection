@@ -361,8 +361,14 @@ static bool load_data_packet(BasePort *Port, AmpIO *Board, uint32_t *data_packet
         // DATA 4 & 5: motor current and motor status (for num_motors)
         for (int i = 0; i < num_motors; i++) {
             uint32_t motor_curr = Board->GetMotorCurrent(i); 
-            uint32_t motor_status = Board->GetMotorStatus(i);
-            data_packet[count++] = (uint32_t)(((motor_status & 0x0000FFFF) << 16) | (motor_curr & 0x0000FFFF));
+            // uint32_t motor_status = Board->GetMotorStatus(i);
+        
+            uint32_t raw_cmd_current;
+            Port->ReadQuadlet(Port->GetBoardId(0), ((i+1) << 4) | 1, raw_cmd_current);
+            // int16_t raw_cmd_current_16_bit = static_cast<int16_t>(raw_cmd_current);
+            // uint16_t cmd_current_casted = *reinterpret_cast<uint16_t *>(&raw_cmd_current_16_bit);
+
+            data_packet[count++] = (uint32_t)(((raw_cmd_current & 0x0000FFFF) << 16) | (motor_curr & 0x0000FFFF));
         }
 
         if (use_ps_io_flag){
@@ -693,7 +699,23 @@ static int dataCollectionStateMachine(BasePort *port, AmpIO *board)
 int main()
 {
     string portDescription = BasePort::DefaultPort();
-    BasePort *Port = PortFactory(portDescription.c_str());
+    cout << "PORT DESCRIPTION: " << portDescription << endl;
+
+    // std::ostringstream nullStream;
+    // std::ostream debugStream;
+    // std::ostream & debugStream = std::cerr;
+    // Custom stream buffer that discards all output
+    class NullBuffer : public std::streambuf {
+    protected:
+        int overflow(int c) override {
+            return c; // Discard all characters
+        }
+    };
+
+    // Null output stream
+    NullBuffer nullBuffer;
+    std::ostream nullStream(&nullBuffer);
+    BasePort *Port = PortFactory(portDescription.c_str(), nullStream);
 
     if (!Port->IsOK()) {
         std::cerr << "Failed to initialize " << Port->GetPortTypeString() << std::endl;

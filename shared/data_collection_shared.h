@@ -33,7 +33,7 @@ const unsigned int IP_UDP_HEADER = 28;
 
 // correct this to value in EthUdpPort.cpp in unsigned int EthUdpPort::GetMaxReadDataSize(void) method
 // PK: Figure out whether following should instead be MTU_DEFAULT-IP_UDP_HEADER (1472)
-const unsigned int UDP_REAL_MTU = 1446;
+const unsigned int UDP_REAL_MTU = 1472;
 
 const unsigned int UDP_MAX_QUADLET_PER_PACKET = UDP_REAL_MTU/4;
 
