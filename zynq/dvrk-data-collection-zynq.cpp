@@ -713,9 +713,11 @@ int main()
     };
 
     // Null output stream
-    NullBuffer nullBuffer;
-    std::ostream nullStream(&nullBuffer);
-    BasePort *Port = PortFactory(portDescription.c_str(), nullStream);
+    // NullBuffer nullBuffer;
+    // std::ostream nullStream(&nullBuffer);
+    // BasePort *Port = PortFactory(portDescription.c_str(), nullStream);
+
+    BasePort *Port = PortFactory(portDescription.c_str());
 
     if (!Port->IsOK()) {
         std::cerr << "Failed to initialize " << Port->GetPortTypeString() << std::endl;
